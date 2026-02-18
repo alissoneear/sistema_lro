@@ -24,7 +24,6 @@ except ImportError:
 
 # --- CONFIGURAÇÃO ---
 class Config:
-    # Ajustado para manter a compatibilidade com o ambiente Windows mapeado em rede
     CAMINHO_RAIZ = r"E:\dev\sistema_lro\ARQUIVOS" if os.name == 'nt' else "."
     
     MAPA_PASTAS = {
@@ -78,14 +77,13 @@ def verificar_assinatura_estrutural(caminho_pdf):
                     obj = annot.get_object()
                     if obj.get("/FT") == "/Sig":
                         return True
-    except Exception as e:
-        # Silenciar ou logar o erro se o PDF estiver corrompido
+    except Exception:
         pass
     return False
 
 def analisar_conteudo_lro(caminho_pdf):
     dados = {
-        "cabecalho": "---", "recebeu": "---", "passou": "---", 
+        "cabecalho": "---", "responsavel": "---", "recebeu": "---", "passou": "---", 
         "equipe": {"smc": "---", "bct": "---", "oea": "---"},
         "assinatura": verificar_assinatura_estrutural(caminho_pdf)
     }
@@ -107,16 +105,31 @@ def analisar_conteudo_lro(caminho_pdf):
 
 def extrair_dados_texto(texto_linear, dados):
     """Extrai informações via Regex do texto plano do PDF."""
+    
+    # 1. Cabeçalho
     match_data = re.search(r"(\d+º)\s*turno.*?do dia\s*(\d+)\s*de\s*([a-zA-Zç]+)\s*de\s*(\d{4})", texto_linear, re.IGNORECASE)
     if match_data:
         dados["cabecalho"] = f"dia {match_data.group(2)} de {match_data.group(3)} de {match_data.group(1)} turno {match_data.group(4)}"
     
-    match_recebi = re.search(r"(Recebi-o aos.*?)((?:,|\.|ciente))", texto_linear, re.IGNORECASE)
+    # 2. Recebeu / Passou (Aceitando aos, às, as)
+    match_recebi = re.search(r"(Recebi-o\s+(?:aos|às|as).*?)((?:,|\.|ciente))", texto_linear, re.IGNORECASE)
     if match_recebi: dados["recebeu"] = match_recebi.group(1).strip()
 
-    match_passei = re.search(r"(Passei-o aos.*?)((?:,|\.|cientificando))", texto_linear, re.IGNORECASE)
+    match_passei = re.search(r"(Passei-o\s+(?:aos|às|as).*?)((?:,|\.|cientificando))", texto_linear, re.IGNORECASE)
     if match_passei: dados["passou"] = match_passei.group(1).strip()
 
+    # 3. Extração do Responsável (Quem assina)
+    # Tenta achar o nome logo após o link de verificação do gov.br
+    match_resp_gov = re.search(r"validar\.iti\.gov\.br\s+([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ a-z]+?)\s*-", texto_linear, re.IGNORECASE)
+    if match_resp_gov:
+        dados["responsavel"] = match_resp_gov.group(1).strip().upper()
+    else:
+        # Se não achar o link gov.br, tenta achar o nome logo após o final do item 4
+        match_resp_txt = re.search(r"ordens em vigor\.\s*([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ a-z]+?)\s*-", texto_linear, re.IGNORECASE)
+        if match_resp_txt:
+            dados["responsavel"] = match_resp_txt.group(1).strip().upper()
+
+    # 4. Equipe de Serviço
     match_bloco = re.search(r"EQUIPE DE SERVIÇO:(.*?)3\.", texto_linear, re.IGNORECASE)
     if match_bloco:
         txt_eq = match_bloco.group(1)
@@ -193,7 +206,7 @@ def processo_verificacao_visual(lista_pendentes):
                     print(f"{Cor.GREEN}   [V] Validado e Padronizado: {novo_nome_base}{Cor.RESET}")
                     break
                 except PermissionError:
-                    input(f"{Cor.RED}   [!] Feche o ficheiro PDF! Pressione Enter para tentar novamente.{Cor.RESET}")
+                    input(f"{Cor.RED}   [!] Feche o arquivo PDF! Pressione Enter para tentar novamente.{Cor.RESET}")
                 except Exception as e:
                     print(f"{Cor.RED}Erro: {e}{Cor.RESET}")
                     break
@@ -204,14 +217,18 @@ def exibir_dados_analise(info):
     if not info: return
     print("-" * 60)
     print(f"📅 {Cor.GREEN}{info['cabecalho']}{Cor.RESET}")
+    
+    # Exibição do Responsável
+    print(f"👤 RESPONSÁVEL: {Cor.CYAN}{info['responsavel']}{Cor.RESET}")
+    
     if info['assinatura']:
         print(f"🔏 ASSINATURA: {Cor.GREEN}OK (Certificado Digital Detectado) ✅{Cor.RESET}")
     else:
-        print(f"🔏 ASSINATURA: {Cor.RED}NÃO DETETADA NA ESTRUTURA ❌{Cor.RESET}")
+        print(f"🔏 ASSINATURA: {Cor.RED}NÃO DETECTADA NA ESTRUTURA ❌{Cor.RESET}")
     print("-" * 60)
     print(f"⬅️  Recebeu: {info['recebeu']}")
     print(f"➡️  Passou:  {info['passou']}")
-    print(f"{Cor.WHITE}👥 Equipa:{Cor.RESET}")
+    print(f"{Cor.WHITE}👥 Equipe:{Cor.RESET}")
     print(f"   • SMC: {info['equipe']['smc']}")
     print(f"   • BCT: {info['equipe']['bct']}")
     print(f"   • OEA: {info['equipe']['oea']}")
@@ -265,7 +282,7 @@ def main():
         if mes == mes_atual and ano_curto == ano_atual_curto: 
             qtd_dias = agora.day
 
-        print(f"\n{Cor.YELLOW}>> A analisar {Config.MAPA_PASTAS.get(mes)}...{Cor.RESET}")
+        print(f"\n{Cor.YELLOW}>> Analisando {Config.MAPA_PASTAS.get(mes)}...{Cor.RESET}")
         print("-" * 60)
 
         # Variáveis de Estado
@@ -302,7 +319,7 @@ def main():
                     lista_pendentes.append({'path': tem_novo[0], 'data': data_str, 'turno': turno})
                     problemas += 1
                 elif tem_falta_lro:
-                    print(f"{Cor.MAGENTA}[!] NÃO CONFECIONADO: {os.path.basename(tem_falta_lro[0])}{Cor.RESET}")
+                    print(f"{Cor.MAGENTA}[!] NÃO CONFECCIONADO: {os.path.basename(tem_falta_lro[0])}{Cor.RESET}")
                     relatorio.append(os.path.basename(tem_falta_lro[0])); problemas += 1
                 elif tem_novo:
                     n = os.path.basename(tem_novo[0])
@@ -331,7 +348,7 @@ def main():
             print("-" * 30 + "\n")
 
         if lista_para_criar:
-            if input(f"{Cor.YELLOW}Criar ficheiros FALTA LRO? (S/N): {Cor.RESET}").lower() in ['s', 'ok']:
+            if input(f"{Cor.YELLOW}Criar arquivos FALTA LRO? (S/N): {Cor.RESET}").lower() in ['s', 'ok']:
                 for i in lista_para_criar:
                     n = f"{i['str']}_{i['turno']}TURNO FALTA LRO ().txt"
                     try: 
@@ -342,7 +359,7 @@ def main():
 
         processo_verificacao_visual(lista_pendentes)
 
-        if input("\nSair? (S/Enter): ").lower() in ['s', 'ok']: 
+        if input("\nVerificar outro mês? (S/Enter para sair): ").lower() not in ['s', 'ok']: 
             break
 
 if __name__ == "__main__":
