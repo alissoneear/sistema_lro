@@ -3,8 +3,9 @@ import sys
 from config import Cor
 from utils import limpar_tela
 
-# Importa os nossos novos módulos
+# Importa os módulos
 from modulos import verificador
+from modulos import conferencia # Novo!
 from modulos import escala
 
 def menu_principal():
@@ -19,8 +20,9 @@ def menu_principal():
         print(f"{Cor.RESET}")
         
         print("Escolha uma funcionalidade:\n")
-        print(f"  {Cor.CYAN}[1]{Cor.RESET} Verificador LRO")
-        print(f"  {Cor.CYAN}[2]{Cor.RESET} Escala Cumprida")
+        print(f"  {Cor.CYAN}[1]{Cor.RESET} Verificador LRO (Validar/Assinar)")
+        print(f"  {Cor.CYAN}[2]{Cor.RESET} Conferência Rápida (Auxiliar Escala)")
+        print(f"  {Cor.CYAN}[3]{Cor.RESET} Escala Cumprida (Gerar Tabela/Auditoria)")
         print(f"  {Cor.RED}[0]{Cor.RESET} Sair\n")
         
         opcao = input("Opção: ")
@@ -28,6 +30,8 @@ def menu_principal():
         if opcao == '1':
             verificador.executar()
         elif opcao == '2':
+            conferencia.executar()
+        elif opcao == '3':
             escala.executar()
         elif opcao == '0':
             limpar_tela()
@@ -41,6 +45,5 @@ if __name__ == "__main__":
     try:
         menu_principal()
     except KeyboardInterrupt:
-        # Captura o CTRL+C em qualquer parte do sistema e sai de forma elegante
         print(f"\n\n{Cor.GREEN}Sessão encerrada (CTRL+C). Até à próxima!{Cor.RESET}\n")
         sys.exit(0)
