@@ -2,7 +2,7 @@ import os
 import sys
 import glob
 import re
-import unicodedata # Nova biblioteca nativa para lidar com acentos!
+import unicodedata
 
 from config import Config, Cor
 
@@ -41,7 +41,7 @@ def pedir_confirmacao(mensagem):
             elif tecla == b'\x1b':
                 print("ESC")
                 return False
-            elif tecla == b'\x03':  # Trata o CTRL+C corretamente!
+            elif tecla == b'\x03':
                 print("^C")
                 raise KeyboardInterrupt
     else:
@@ -60,22 +60,19 @@ def abrir_arquivo(caminho):
     except Exception as e:
         print(f"{Cor.RED}[Erro ao abrir]: {e}{Cor.RESET}")
 
-# ==========================================
-#     NOVO SISTEMA DE NORMALIZAÇÃO
-# ==========================================
+
 def normalizar_texto(texto):
-    """Remove acentos, converte para maiúsculo e padroniza erros."""
     if not texto: return "---"
     texto = str(texto).upper()
-    
-    # 1. Remove os acentos matematicamente
     texto = unicodedata.normalize('NFD', texto).encode('ascii', 'ignore').decode('utf-8')
     
-    # 2. Dicionário de Correções de Digitação (Pode adicionar os que quiser!)
     correcoes = {
         "JACKSON": "JAKSON",
         "JACSON": "JAKSON",
-        "GIOVANI": "GIOVANNI"
+        "GIOVANI": "GIOVANNI",
+        "IS ": "1S ",  # Corrige erro de digitação de I no lugar de 1
+        "I S ": "1S ",
+        "CP ": "CAP "  # Corrige CP FÁBIO CÉSAR
     }
     for errado, certo in correcoes.items():
         texto = texto.replace(errado, certo)
@@ -83,18 +80,14 @@ def normalizar_texto(texto):
     return texto.strip()
 
 def extrair_nome_base(nome_guerra):
-    """Remove a patente do nome para buscar só a essência. Ex: '1S TERBECK' -> 'TERBECK'"""
     nome_norm = normalizar_texto(nome_guerra)
     partes = nome_norm.split()
     patentes = ['1S', '2S', '3S', 'SO', 'TEN', '1T', '2T', 'CAP', 'MAJ', 'CEL', 'SGT']
-    
-    # Se a primeira palavra for uma patente, junta o resto do nome
     if len(partes) > 1 and partes[0] in patentes:
         return " ".join(partes[1:])
     return nome_norm
 
 def encontrar_legenda(nome_extraido, dicionario_mapa):
-    """Busca Padrão"""
     nome_ext = normalizar_texto(nome_extraido)
     if nome_ext in ["---", ""]: return "---"
     
@@ -104,21 +97,15 @@ def encontrar_legenda(nome_extraido, dicionario_mapa):
             return dados["legenda"]
     return "???"
 
-def encontrar_legenda_fallback(texto_completo, dicionario_mapa):
-    """Busca Agressiva: varre o documento inteiro procurando a essência do nome."""
-    texto_norm = normalizar_texto(texto_completo)
-    
+def encontrar_legenda_fallback(texto_alvo, dicionario_mapa):
+    texto_norm = normalizar_texto(texto_alvo)
     for nome_guerra, dados in dicionario_mapa.items():
         nome_base = extrair_nome_base(nome_guerra)
-        # Se o nome base ("FABIO CESAR", "JAKSON") existir em qualquer lugar do PDF
         if nome_base in texto_norm:
             return dados["legenda"]
     return "???"
 
 
-# ==========================================
-#     PROCESSAMENTO DE PDF E TEXTO
-# ==========================================
 def verificar_assinatura_estrutural(caminho_pdf):
     if not PYPDF_ENABLED: return False
     try:
@@ -154,11 +141,16 @@ def extrair_dados_texto(texto_linear, dados):
     match_bloco = re.search(r"EQUIPE DE SERVI[CÇ]O:(.*?)3\.", texto_linear, re.IGNORECASE)
     if match_bloco:
         txt_eq = match_bloco.group(1)
-        m_smc = re.search(r"(?:^|;)\s*([^;-]+?)\s*(?:-|)\s*SMC", txt_eq, re.IGNORECASE)
+        dados["texto_equipe"] = txt_eq # Guardar APENAS este bloco para o fallback
+        
+        # Regex atualizada: Aceita [;,] (Vírgula ou Ponto-e-vírgula) e não quebra com espaços
+        m_smc = re.search(r"(?:^|[;,])\s*(.*?)\s*(?:-|)\s*SMC", txt_eq, re.IGNORECASE)
         if m_smc: dados["equipe"]["smc"] = m_smc.group(1).strip()
-        m_bct = re.search(r";\s*([^;-]+?)\s*(?:-|)\s*Controlador", txt_eq, re.IGNORECASE)
+        
+        m_bct = re.search(r"[;,]\s*(.*?)\s*(?:-|)\s*Controlador", txt_eq, re.IGNORECASE)
         if m_bct: dados["equipe"]["bct"] = m_bct.group(1).strip()
-        m_oea = re.search(r";\s*([^;-]+?)\s*(?:-|)\s*Operador", txt_eq, re.IGNORECASE)
+        
+        m_oea = re.search(r"[;,]\s*(.*?)\s*(?:-|)\s*Operador", txt_eq, re.IGNORECASE)
         if m_oea: dados["equipe"]["oea"] = m_oea.group(1).strip()
 
 def analisar_conteudo_lro(caminho_pdf):
@@ -166,7 +158,8 @@ def analisar_conteudo_lro(caminho_pdf):
         "cabecalho": "---", "responsavel": "---", "recebeu": "---", "passou": "---", 
         "equipe": {"smc": "---", "bct": "---", "oea": "---"},
         "assinatura": verificar_assinatura_estrutural(caminho_pdf),
-        "texto_completo": "" # Salva o texto completo para o Fallback Agressivo
+        "texto_completo": "",
+        "texto_equipe": "" # Campo novo!
     }
     if PLUMBER_ENABLED:
         try:
@@ -174,7 +167,6 @@ def analisar_conteudo_lro(caminho_pdf):
                 texto_completo = "".join([pagina.extract_text() or "" for pagina in pdf.pages])
                 texto_linear = texto_completo.replace('\n', ' ')
                 
-                # Guarda o texto para emergências
                 dados["texto_completo"] = texto_linear
                 
                 if not dados["assinatura"] and "validar.iti.gov.br" in texto_linear.lower():

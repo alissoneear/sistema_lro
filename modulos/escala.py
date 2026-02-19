@@ -99,17 +99,20 @@ def executar():
 
                     info = utils.analisar_conteudo_lro(arquivo_alvo)
                     if info:
-                        # 1. Tenta a Busca Normal (Expressões Regulares)
+                        # 1. Busca normal via Regex
                         leg_smc = utils.encontrar_legenda(info['equipe']['smc'], mapa_smc)
                         leg_bct = utils.encontrar_legenda(info['equipe']['bct'], mapa_bct)
                         leg_oea = utils.encontrar_legenda(info['equipe']['oea'], mapa_oea)
                         
-                        # 2. SE FALHAR, Ativa a Busca Agressiva (Fallback) no documento todo!
-                        if leg_smc in ['---', '???']: leg_smc = utils.encontrar_legenda_fallback(info['texto_completo'], mapa_smc)
-                        if leg_bct in ['---', '???']: leg_bct = utils.encontrar_legenda_fallback(info['texto_completo'], mapa_bct)
-                        if leg_oea in ['---', '???']: leg_oea = utils.encontrar_legenda_fallback(info['texto_completo'], mapa_oea)
+                        # 2. Busca Agressiva (Fallback) - MAS SÓ NO BLOCO DA EQUIPE!
+                        texto_busca_segura = info.get('texto_equipe', '') 
+                        if not texto_busca_segura: # Se falhar tudo, varre o doc inteiro
+                            texto_busca_segura = info['texto_completo']
 
-                        # Fixa o SMC no primeiro turno que encontrar válido
+                        if leg_smc in ['---', '???']: leg_smc = utils.encontrar_legenda_fallback(texto_busca_segura, mapa_smc)
+                        if leg_bct in ['---', '???']: leg_bct = utils.encontrar_legenda_fallback(texto_busca_segura, mapa_bct)
+                        if leg_oea in ['---', '???']: leg_oea = utils.encontrar_legenda_fallback(texto_busca_segura, mapa_oea)
+
                         if dia_dados['smc'] == '---' and leg_smc not in ['---', '???']:
                             dia_dados['smc'] = leg_smc
                         elif dia_dados['smc'] == '---':
