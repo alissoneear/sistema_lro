@@ -70,9 +70,12 @@ def normalizar_texto(texto):
         "JACKSON": "JAKSON",
         "JACSON": "JAKSON",
         "GIOVANI": "GIOVANNI",
-        "IS ": "1S ",  # Corrige erro de digitação de I no lugar de 1
+        "GEAHL": "GEALH",
+        "IS ": "1S ",
         "I S ": "1S ",
-        "CP ": "CAP "  # Corrige CP FÁBIO CÉSAR
+        "CP ": "CAP ", 
+        "D. CASTRO": "DE CASTRO",
+        "D CASTRO": "DE CASTRO", 
     }
     for errado, certo in correcoes.items():
         texto = texto.replace(errado, certo)
