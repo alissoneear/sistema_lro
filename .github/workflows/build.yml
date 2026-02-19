@@ -1,0 +1,33 @@
+name: Gerar Executável Windows
+
+on:
+  push:
+    branches: [ "main" ] # O processo inicia sempre que você der 'push' na branch main
+
+jobs:
+  build:
+    runs-on: windows-latest # Usa um servidor Windows real da GitHub
+
+    steps:
+    - name: Checkout do código
+      uses: actions/checkout@v4
+
+    - name: Configurar Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Instalar Dependências
+      run: |
+        python -m pip install --upgrade pip
+        pip install pdfplumber pypdf pyinstaller
+
+    - name: Gerar Executável com PyInstaller
+      run: |
+        python -m PyInstaller --onefile --console main.py
+
+    - name: Upload do Executável
+      uses: actions/upload-artifact@v4
+      with:
+        name: Sistema-LRO-Windows
+        path: dist/main.exe

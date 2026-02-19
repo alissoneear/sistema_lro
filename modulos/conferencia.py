@@ -26,13 +26,12 @@ def executar():
         ano_longo = "20" + ano_curto
 
         path_ano = os.path.join(Config.CAMINHO_RAIZ, f"LRO {ano_longo}")
-        if os.name != 'nt' and not os.path.exists(path_ano): path_ano = Config.CAMINHO_RAIZ 
-            
         path_mes = os.path.join(path_ano, Config.MAPA_PASTAS.get(mes, "X"))
-        if os.name == 'nt' and not os.path.exists(path_mes):
-            print(f"{Cor.RED}Pasta do mês não encontrada.{Cor.RESET}"); time.sleep(2); continue
-        
-        if os.name != 'nt': path_mes = "." 
+      
+        if not os.path.exists(path_mes):
+            print(f"{Cor.RED}Pasta do mês não encontrada.{Cor.RESET}")
+            time.sleep(2)
+            continue 
 
         try: qtd_dias = calendar.monthrange(int(ano_longo), int(mes))[1]
         except: continue
