@@ -44,7 +44,79 @@ class Cor:
     WHITE = '\033[97m'
     GREY = '\033[90m'
     RESET = '\033[0m'
-    ORANGE = '\033[38;5;208m'  # Cor Laranja para o Menu
+    ORANGE = '\033[38;5;208m'
+
+# --- DADOS DO EFETIVO ---
+class DadosEfetivo:
+    legendas_oea = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I']
+    legendas_bct = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M']
+    legendas_smc = ['GEA', 'EVT', 'FCS', 'MAL', 'BAR', 'ESC', 'CPL', 'JAK', 'CER']
+
+    nomes_oea = [
+        '1S QSS BCO LUIZ FILIPE TERBECK - 1S TERBECK - 6032338', 
+        '1S BCO RUI ANTONIO DOS SANTOS JUNIOR - 1S RUI - 6032311', 
+        '2S BCO SAULO JULIO SANTOS GONÇALVES - 2S SAULO - 6134262', 
+        '2S BCO KEVIN SOUZA DE OLIVEIRA - 2S KEVIN - 6157912', 
+        '2S BCO ALAN SITORSKI - 2S SITORSKI - 6156568', 
+        '2S BCO LUCIANO FERNANDES DOS SANTOS - 2S FERNANDES - 6156878', 
+        'SO BCO FRANCISCO TORRES SOARES - SO SOARES - 3502201', 
+        '2S BCO ELIAS EDVANEIDSON DE ARAUJO CARDOSO - 2S ELIAS - 6328512', 
+        '2S BCO ALISSON LOURENÇO DA SILVA - 2S LOURENÇO - 6780245'
+    ]
+
+    nomes_bct = [
+        'SO BCT MARCELO DE SOUZA PEREIRA - SO SOUZA - 3988554', 
+        '1S BCT DIOGO FAVARO WUNDERLICH - 1S FAVARO - 4202317', 
+        '1S BCT RÉGIS FERRARI - 1S RÉGIS - 4378717', 
+        '1S BCT CLEON FRAGA DOS SANTOS - 1S CLEON - 4378660', 
+        '1S BCT MARCELO ZANOTTO GONÇALVES - 1S ZANOTTO - 6100775', 
+        '1S BCT GIOVANNI COCCO ALVES - 1S GIOVANNI - 6158080', 
+        '2S BCT YURI DE PAIVA WERNECK - 2S WERNECK - 6301371', 
+        '2S BCT EDSON DE SOUZA NUNES - 2S EDSON - 6750451', 
+        '1S BCT GUSTAVO FRACAO LAGO - 1S GUSTAVO - 4378482', 
+        '1S BCT CRISTIANO PAZ PRATES - 1S PRATES - 4378768', 
+        '1S BCT EVANDRO MACHADO BITTENCOURT - 1S BITTENCOURT - 6087841', 
+        '2S BCT LIS CECI LYRA FONTES - 2S LIS - 6301118', 
+        '2S BCT EDUARDO OLIVEIRA DE CASTRO - 2S DE CASTRO - 6576044'
+    ]
+
+    nomes_smc = [
+        'MAJ AV THIAGO GEALH DE CAMPOS - MAJ GEALH', 
+        'MAJ QOECTA EVERTON RIBEIRO DA COSTA - MAJ EVERTON', 
+        'CAP QOECTA FÁBIO CÉSAR SILVA DE OLIVEIRA - CAP FÁBIO CÉSAR', 
+        'CAP QOECTA JOSÉ GUILHERME MALTA - CAP MALTA', 
+        'CAP QOECTA BARBARA PACHECO LINS - CAP BARBARA', 
+        'CAP EDGAR HENRIQUE ESCOBAR DOS SANTOS - CAP ESCOBAR', 
+        '1T AV DANIEL BUERY DE MELO CAMPELO - 1T CAMPELO', 
+        '1T QOECTA JAKSON DA SILVA - 1T JAKSON', 
+        '1T QOECTA JULIMAR CERUTTI DA SILVA - 1T CERUTTI'
+    ]
+
+    @staticmethod
+    def mapear_efetivo():
+        """Cria dicionários para busca rápida cruzando NOME DE GUERRA com LEGENDA e SARAM."""
+        mapa_smc, mapa_bct, mapa_oea = {}, {}, {}
+        
+        # OEA
+        for i, linha in enumerate(DadosEfetivo.nomes_oea):
+            partes = [p.strip() for p in linha.split('-')]
+            if len(partes) >= 3:
+                mapa_oea[partes[1].upper()] = {"legenda": DadosEfetivo.legendas_oea[i], "saram": partes[2]}
+                
+        # BCT
+        for i, linha in enumerate(DadosEfetivo.nomes_bct):
+            partes = [p.strip() for p in linha.split('-')]
+            if len(partes) >= 3:
+                mapa_bct[partes[1].upper()] = {"legenda": DadosEfetivo.legendas_bct[i], "saram": partes[2]}
+                
+        # SMC
+        for i, linha in enumerate(DadosEfetivo.nomes_smc):
+            partes = [p.strip() for p in linha.split('-')]
+            if len(partes) >= 2:
+                mapa_smc[partes[1].upper()] = {"legenda": DadosEfetivo.legendas_smc[i], "saram": None}
+                
+        return mapa_smc, mapa_bct, mapa_oea
+
 
 # --- UTILITÁRIOS ---
 def limpar_tela():
@@ -60,6 +132,17 @@ def abrir_arquivo(caminho):
             os.system(f'xdg-open "{caminho}"')
     except Exception as e:
         print(f"{Cor.RED}[Erro ao abrir]: {e}{Cor.RESET}")
+
+def encontrar_legenda(nome_extraido, dicionario_mapa):
+    nome_ext = nome_extraido.upper().strip()
+    if nome_ext in ["---", ""]: 
+        return "---"
+        
+    for nome_guerra, dados in dicionario_mapa.items():
+        if nome_guerra in nome_ext or nome_ext in nome_guerra:
+            return dados["legenda"]
+            
+    return "???"
 
 # --- PROCESSAMENTO DE PDF (VERIFICADOR LRO) ---
 def verificar_assinatura_estrutural(caminho_pdf):
@@ -132,7 +215,7 @@ def extrair_dados_texto(texto_linear, dados):
         m_oea = re.search(r";\s*([^;-]+?)\s*(?:-|)\s*Operador", txt_eq, re.IGNORECASE)
         if m_oea: dados["equipe"]["oea"] = m_oea.group(1).strip()
 
-# --- LÓGICA DE FICHEIROS (VERIFICADOR LRO) ---
+# --- LÓGICA DE FICHEIROS ---
 def buscar_arquivos_flexivel(pasta, data_string, turno):
     padroes = [
         f"{data_string}_{turno}TURNO*", f"{data_string}-{turno}TURNO*",
@@ -213,8 +296,8 @@ def exibir_dados_analise(info):
     else:
         print(f"🔏 ASSINATURA: {Cor.RED}NÃO DETECTADA NA ESTRUTURA ❌{Cor.RESET}")
     print("-" * 60)
-    print(f"⬅️  Recebeu: {info['recebeu']}")
-    print(f"➡️  Passou:  {info['passou']}")
+    print(f"⬅️ Recebeu: {info['recebeu']}")
+    print(f"➡️ Passou:  {info['passou']}")
     print(f"{Cor.WHITE}👥 Equipe:{Cor.RESET}")
     print(f"   • SMC: {info['equipe']['smc']}")
     print(f"   • BCT: {info['equipe']['bct']}")
@@ -333,7 +416,6 @@ def modulo_verificador_lro():
 
         processo_verificacao_visual(lista_pendentes)
 
-        # Alterado para perguntar se quer voltar ao menu
         if input("\nVerificar outro mês? (S/Enter para voltar ao menu): ").lower() not in ['s', 'ok']: 
             break
 
@@ -342,13 +424,103 @@ def modulo_verificador_lro():
 #         MÓDULO 2: ESCALA CUMPRIDA
 # ==========================================
 def modulo_escala_cumprida():
-    limpar_tela()
-    print(f"{Cor.ORANGE}=== SISTEMA LRO - Escala Cumprida ==={Cor.RESET}")
-    print(f"\n{Cor.GREEN}Você entrou na funcionalidade: Escala Cumprida.{Cor.RESET}")
-    print("\n(Em desenvolvimento...)")
-    
-    # Pausa para o utilizador ler e decidir voltar
-    input(f"\n{Cor.GREY}Pressione Enter para voltar ao menu principal...{Cor.RESET}")
+    if os.name == 'nt' and not os.path.exists(Config.CAMINHO_RAIZ):
+        input(f"{Cor.RED}[ERRO CRÍTICO] Caminho {Config.CAMINHO_RAIZ} não encontrado.{Cor.RESET}")
+        return
+
+    mapa_smc, mapa_bct, mapa_oea = DadosEfetivo.mapear_efetivo()
+
+    while True:
+        limpar_tela()
+        agora = datetime.datetime.now()
+        mes_atual, ano_atual_curto = agora.strftime("%m"), agora.strftime("%y")
+
+        print(f"{Cor.ORANGE}=== SISTEMA LRO - Escala Cumprida ==={Cor.RESET}")
+        
+        inp_mes = input(f"MÊS (Enter para {mes_atual}): ")
+        mes = inp_mes.zfill(2) if inp_mes else mes_atual
+        inp_ano = input(f"ANO (Enter para {ano_atual_curto}): ")
+        ano_curto = inp_ano if inp_ano else ano_atual_curto
+        ano_longo = "20" + ano_curto
+
+        path_ano = os.path.join(Config.CAMINHO_RAIZ, f"LRO {ano_longo}")
+        if os.name != 'nt' and not os.path.exists(path_ano): path_ano = Config.CAMINHO_RAIZ 
+            
+        path_mes = os.path.join(path_ano, Config.MAPA_PASTAS.get(mes, "X"))
+        if os.name != 'nt': path_mes = "." 
+
+        if not os.path.exists(path_mes) and os.name == 'nt':
+            print(f"{Cor.RED}Pasta do mês não encontrada ({path_mes}).{Cor.RESET}"); time.sleep(2); continue
+
+        try: 
+            qtd_dias = calendar.monthrange(int(ano_longo), int(mes))[1]
+        except Exception: 
+            continue
+            
+        if mes == mes_atual and ano_curto == ano_atual_curto: 
+            qtd_dias = agora.day
+
+        print(f"\n{Cor.GREY}Extraindo dados de forma invisível... Aguarde.{Cor.RESET}\n")
+
+        # Cabeçalho da Tabela Refatorado
+        print(f"{Cor.bg_BLUE}{Cor.WHITE} DIA | SMC | BCT1 | BCT2 | BCT3 | OEA1 | OEA2 | OEA3 {Cor.RESET}")
+
+        for dia in range(1, qtd_dias + 1):
+            dia_fmt = f"{dia:02d}"
+            data_str = f"{dia_fmt}{mes}{ano_curto}"
+            
+            turnos = calcular_turnos_validos(dia, mes, agora.day, mes_atual, agora.hour)
+
+            # Memória temporária para os dados do dia
+            dia_dados = {
+                'smc': '---',
+                'bct': {1: '---', 2: '---', 3: '---'},
+                'oea': {1: '---', 2: '---', 3: '---'}
+            }
+
+            for turno in turnos:
+                arquivos = buscar_arquivos_flexivel(path_mes, data_str, turno)
+                
+                if not arquivos:
+                    continue
+
+                arquivos_ok = [f for f in arquivos if "OK" in f.upper()]
+                arquivo_alvo = arquivos_ok[0] if arquivos_ok else arquivos[0]
+                
+                if "FALTA LRO" in arquivo_alvo.upper() and arquivo_alvo.endswith('.txt'):
+                    dia_dados['bct'][turno] = 'PND'
+                    dia_dados['oea'][turno] = 'PND'
+                    continue
+
+                info = analisar_conteudo_lro(arquivo_alvo)
+                
+                if info:
+                    leg_smc = encontrar_legenda(info['equipe']['smc'], mapa_smc)
+                    
+                    # Fixa o SMC no primeiro turno que for encontrado e válido
+                    if dia_dados['smc'] == '---' and leg_smc not in ['---', '???']:
+                        dia_dados['smc'] = leg_smc
+                    # Fallback caso o único SMC encontrado for desconhecido (???)
+                    elif dia_dados['smc'] == '---':
+                        dia_dados['smc'] = leg_smc
+                        
+                    dia_dados['bct'][turno] = encontrar_legenda(info['equipe']['bct'], mapa_bct)
+                    dia_dados['oea'][turno] = encontrar_legenda(info['equipe']['oea'], mapa_oea)
+                else:
+                    dia_dados['bct'][turno] = 'ERR'
+                    dia_dados['oea'][turno] = 'ERR'
+
+            # Imprimir a linha consolidada do dia
+            smc = dia_dados['smc']
+            b1, b2, b3 = dia_dados['bct'][1], dia_dados['bct'][2], dia_dados['bct'][3]
+            o1, o2, o3 = dia_dados['oea'][1], dia_dados['oea'][2], dia_dados['oea'][3]
+            
+            print(f" {dia_fmt}  | {smc:^3} | {b1:^4} | {b2:^4} | {b3:^4} | {o1:^4} | {o2:^4} | {o3:^4} ")
+
+        print("-" * 62)
+        
+        if input(f"{Cor.YELLOW}Verificar Escala de outro mês? (S/Enter para voltar ao menu): {Cor.RESET}").lower() not in ['s', 'ok']: 
+            break
 
 
 # ==========================================
@@ -385,5 +557,4 @@ def menu_principal():
             time.sleep(1.5)
 
 if __name__ == "__main__":
-    # O script agora inicia pelo menu principal
     menu_principal()
