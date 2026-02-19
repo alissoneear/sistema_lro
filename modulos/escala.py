@@ -89,8 +89,6 @@ def executar():
         input(f"{Cor.RED}[ERRO CRÍTICO] Caminho {Config.CAMINHO_RAIZ} não encontrado.{Cor.RESET}")
         return
 
-    mapa_smc, mapa_bct, mapa_oea = DadosEfetivo.mapear_efetivo()
-
     while True:
         utils.limpar_tela()
         agora = datetime.datetime.now()
@@ -103,6 +101,8 @@ def executar():
         inp_ano = input(f"ANO (Enter para {ano_atual_curto}): ")
         ano_curto = inp_ano if inp_ano else ano_atual_curto
         ano_longo = "20" + ano_curto
+
+        mapa_smc, mapa_bct, mapa_oea = DadosEfetivo.mapear_efetivo(mes, ano_curto)
 
         while True:
             utils.limpar_tela()
@@ -153,7 +153,7 @@ def executar():
                         continue
 
                     arquivo_alvo = [f for f in pdfs if "OK" in f.upper()][0] if [f for f in pdfs if "OK" in f.upper()] else pdfs[0]
-                    info = utils.analisar_conteudo_lro(arquivo_alvo)
+                    info = utils.analisar_conteudo_lro(arquivo_alvo, mes, ano_curto)
                     if info:
                         # O utils agora já traz o nome inteligente! Basta converter para legenda.
                         dia_dados['smc'] = utils.encontrar_legenda(info['equipe']['smc'], mapa_smc)
