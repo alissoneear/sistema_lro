@@ -49,7 +49,7 @@ def renomear_arquivo(caminho_atual, novo_caminho):
             print(f"{Cor.RED}Erro: {e}{Cor.RESET}")
             break
 
-def processo_verificacao_visual(lista_pendentes):
+def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
     if not lista_pendentes: return
     print(f"{Cor.ORANGE}Verificar {len(lista_pendentes)} livros pendentes?{Cor.RESET}")
     if not utils.pedir_confirmacao("Iniciar UM POR UM? (S/Enter p/ Sim, ESC p/ Pular): "): return
@@ -69,7 +69,7 @@ def processo_verificacao_visual(lista_pendentes):
             utils.abrir_arquivo(caminho)
             
         print(f"{Cor.GREY}A analisar estrutura e texto...{Cor.RESET}")
-        info = utils.analisar_conteudo_lro(caminho)
+        info = utils.analisar_conteudo_lro(caminho, mes, ano_curto)
         exibir_dados_analise(info)
         
         dir_arq = os.path.dirname(caminho)
@@ -83,7 +83,7 @@ def processo_verificacao_visual(lista_pendentes):
             else:
                 print(f"{Cor.GREY}   [-] Mantido.{Cor.RESET}")
         else:
-            nome_dic = extrair_nome_relato(info.get('responsavel', ''))
+            nome_dic = extrair_nome_relato(info.get('responsavel', ''), mes, ano_curto)
             
             if nome_dic != "???":
                 sugestao_str = f" ({nome_dic})"
@@ -100,7 +100,7 @@ def processo_verificacao_visual(lista_pendentes):
                 print(f"{Cor.GREY}   [-] Mantido.{Cor.RESET}")
 
 # --- FUNÇÃO INTELIGENTE DE EXTRAÇÃO DE NOME ---
-def extrair_nome_relato(raw_str):
+def extrair_nome_relato(raw_str, mes=None, ano_curto=None):
     """Procura o nome oficial do militar dentro do texto sujo do PDF usando o Dicionário."""
     if not raw_str or raw_str in ["---", "???"]: return "???"
     
@@ -108,7 +108,7 @@ def extrair_nome_relato(raw_str):
     texto_norm = utils.normalizar_texto(raw_str)
     
     # 2. Carrega todos os nomes de guerra conhecidos
-    mapa_smc, mapa_bct, mapa_oea = DadosEfetivo.mapear_efetivo()
+    mapa_smc, mapa_bct, mapa_oea = DadosEfetivo.mapear_efetivo(mes, ano_curto)
     todos_mapas = {**mapa_smc, **mapa_bct, **mapa_oea}
     
     # 3. Extrai apenas as "essências" (GIOVANNI, SAULO, RUI, etc.)
@@ -257,9 +257,11 @@ def executar():
                         ok_files = [f for f in pdfs if "OK" in f.upper()]
                         arquivo_alvo = ok_files[0] if ok_files else pdfs[0]
                         
-                        info = utils.analisar_conteudo_lro(arquivo_alvo)
+                        mes_dt = dt.strftime('%m')
+                        ano_dt = dt.strftime('%y')
+                        info = utils.analisar_conteudo_lro(arquivo_alvo, mes_dt, ano_dt)
                         raw = info.get('passou', '') if is_prev else info.get('recebeu', '')
-                        return extrair_nome_relato(raw)
+                        return extrair_nome_relato(raw, mes_dt, ano_dt)
                     return "???"
 
                 passou_nome = get_nome_adjacente(dt_prev, tr_prev, True)  
@@ -285,7 +287,7 @@ def executar():
                     except Exception as e: 
                         print(f"{Cor.RED}   Erro ao criar: {e}{Cor.RESET}")
 
-        processo_verificacao_visual(lista_pendentes)
+        processo_verificacao_visual(lista_pendentes, mes, ano_curto)
 
         if not utils.pedir_confirmacao(f"\n{Cor.YELLOW}Verificar outro mês? (S/Enter p/ Sim, ESC p/ Voltar ao menu): {Cor.RESET}"): 
             break

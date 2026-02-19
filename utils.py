@@ -137,7 +137,7 @@ def busca_inteligente_equipe(texto_bloco, mapa_efetivo):
             return partes[1].strip() if len(partes) > 1 else nome_completo
     return "---"
 
-def extrair_dados_texto(texto_linear, dados):
+def extrair_dados_texto(texto_linear, dados, mes=None, ano_curto=None):
     # Cabeçalho
     match_data = re.search(r"(\d+º)\s*turno.*?do dia\s*(\d+)\s*de\s*([a-zA-Zç]+)\s*de\s*(\d{4})", texto_linear, re.IGNORECASE)
     if match_data:
@@ -160,20 +160,21 @@ def extrair_dados_texto(texto_linear, dados):
         match_resp_txt = re.search(r"ordens em vigor\.\s*([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ a-z]+?)\s*-", texto_linear, re.IGNORECASE)
         if match_resp_txt: dados["responsavel"] = match_resp_txt.group(1).strip().upper()
 
-    # Equipe (Agora totalmente automatizada e inteligente)
+# Equipe (Agora totalmente automatizada e inteligente)
     match_bloco_eq = re.search(r"EQUIPE DE SERVI[CÇ]O:(.*?)3\.", texto_linear, re.IGNORECASE)
     if match_bloco_eq:
         txt_eq = match_bloco_eq.group(1)
         dados["texto_equipe"] = txt_eq 
         
         from config import DadosEfetivo
-        m_smc, m_bct, m_oea = DadosEfetivo.mapear_efetivo()
+        # Passar o mês e ano para buscar o histórico correto!
+        m_smc, m_bct, m_oea = DadosEfetivo.mapear_efetivo(mes, ano_curto)
         
         dados["equipe"]["smc"] = busca_inteligente_equipe(txt_eq, m_smc)
         dados["equipe"]["bct"] = busca_inteligente_equipe(txt_eq, m_bct)
         dados["equipe"]["oea"] = busca_inteligente_equipe(txt_eq, m_oea)
 
-def analisar_conteudo_lro(caminho_pdf):
+def analisar_conteudo_lro(caminho_pdf, mes=None, ano_curto=None):
     dados = {
         "cabecalho": "---", "responsavel": "---", "recebeu": "---", "passou": "---", 
         "equipe": {"smc": "---", "bct": "---", "oea": "---"},
@@ -186,12 +187,11 @@ def analisar_conteudo_lro(caminho_pdf):
             with pdfplumber.open(caminho_pdf) as pdf:
                 texto_completo = "".join([pagina.extract_text() or "" for pagina in pdf.pages])
                 texto_linear = texto_completo.replace('\n', ' ')
-                
                 dados["texto_completo"] = texto_linear
-                
                 if not dados["assinatura"] and "validar.iti.gov.br" in texto_linear.lower():
                     dados["assinatura"] = True
-                extrair_dados_texto(texto_linear, dados)
+                # Repassar mes e ano aqui:
+                extrair_dados_texto(texto_linear, dados, mes, ano_curto)
         except Exception: pass
     return dados
 

@@ -61,7 +61,7 @@ def executar():
                 print("\n\n") 
                 print(f"{Cor.bg_ORANGE}{Cor.WHITE}  ▶ CONFERÊNCIA - Arquivo: {os.path.basename(arquivo_alvo)}  {Cor.RESET}")
                 
-                info = utils.analisar_conteudo_lro(arquivo_alvo)
+                info = utils.analisar_conteudo_lro(arquivo_alvo, mes, ano_curto)
                 verificador.exibir_dados_analise(info)
                 
                 if not utils.pedir_confirmacao(f"{Cor.YELLOW}>> Próximo turno? (S/Enter p/ Sim, ESC p/ Parar): {Cor.RESET}"):
