@@ -1,10 +1,10 @@
 import os
+import sys
 import datetime
 import calendar
 import glob
 import time
 import re
-import sys
 
 # --- IMPORTAÇÃO DAS BIBLIOTECAS ---
 try:
@@ -21,6 +21,11 @@ except ImportError:
     PYPDF_ENABLED = False
     print("AVISO: 'pypdf' não instalado. A validação de assinatura digital falhará.")
 
+try:
+    import msvcrt
+    MSVCRT_ENABLED = True
+except ImportError:
+    MSVCRT_ENABLED = False
 
 # --- CONFIGURAÇÃO ---
 class Config:
@@ -31,6 +36,8 @@ class Config:
         "05": "5 - MAIO",      "06": "6 - JUNHO",     "07": "7 - JULHO", "08": "8 - AGOSTO",
         "09": "9 - SETEMBRO",  "10": "10 - OUTUBRO",  "11": "11 - NOVEMBRO", "12": "12 - DEZEMBRO"
     }
+    
+    MAPA_SEMANA = {0: 'SEG', 1: 'TER', 2: 'QUA', 3: 'QUI', 4: 'SEX', 5: 'SÁB', 6: 'DOM'}
 
 class Cor:
     CYAN = '\033[96m'
@@ -94,27 +101,16 @@ class DadosEfetivo:
 
     @staticmethod
     def mapear_efetivo():
-        """Cria dicionários para busca rápida cruzando NOME DE GUERRA com LEGENDA e SARAM."""
         mapa_smc, mapa_bct, mapa_oea = {}, {}, {}
-        
-        # OEA
         for i, linha in enumerate(DadosEfetivo.nomes_oea):
             partes = [p.strip() for p in linha.split('-')]
-            if len(partes) >= 3:
-                mapa_oea[partes[1].upper()] = {"legenda": DadosEfetivo.legendas_oea[i], "saram": partes[2]}
-                
-        # BCT
+            if len(partes) >= 3: mapa_oea[partes[1].upper()] = {"legenda": DadosEfetivo.legendas_oea[i], "saram": partes[2]}
         for i, linha in enumerate(DadosEfetivo.nomes_bct):
             partes = [p.strip() for p in linha.split('-')]
-            if len(partes) >= 3:
-                mapa_bct[partes[1].upper()] = {"legenda": DadosEfetivo.legendas_bct[i], "saram": partes[2]}
-                
-        # SMC
+            if len(partes) >= 3: mapa_bct[partes[1].upper()] = {"legenda": DadosEfetivo.legendas_bct[i], "saram": partes[2]}
         for i, linha in enumerate(DadosEfetivo.nomes_smc):
             partes = [p.strip() for p in linha.split('-')]
-            if len(partes) >= 2:
-                mapa_smc[partes[1].upper()] = {"legenda": DadosEfetivo.legendas_smc[i], "saram": None}
-                
+            if len(partes) >= 2: mapa_smc[partes[1].upper()] = {"legenda": DadosEfetivo.legendas_smc[i], "saram": None}
         return mapa_smc, mapa_bct, mapa_oea
 
 
@@ -122,46 +118,58 @@ class DadosEfetivo:
 def limpar_tela():
     os.system('cls' if os.name == 'nt' else 'clear')
 
+def pedir_confirmacao(mensagem):
+    """Lê a tecla 'S', 'Enter' ou 'ESC' instantaneamente (no Windows)."""
+    print(mensagem, end='', flush=True)
+    if os.name == 'nt' and MSVCRT_ENABLED:
+        while True:
+            tecla = msvcrt.getch()
+            if tecla in [b's', b'S']:
+                print("S")
+                return True
+            elif tecla == b'\r':  # Tecla Enter
+                print("Enter")
+                return True
+            elif tecla == b'\x1b': # Tecla ESC
+                print("ESC")
+                return False
+    else:
+        # Fallback caso não seja Windows
+        resp = input().strip().upper()
+        if resp == 'ESC': return False
+        return True
+
 def abrir_arquivo(caminho):
     try:
-        if os.name == 'nt':
-            os.startfile(caminho)
-        elif sys.platform == 'darwin': 
-            os.system(f'open "{caminho}"')
-        else:
-            os.system(f'xdg-open "{caminho}"')
+        if os.name == 'nt': os.startfile(caminho)
+        elif sys.platform == 'darwin': os.system(f'open "{caminho}"')
+        else: os.system(f'xdg-open "{caminho}"')
     except Exception as e:
         print(f"{Cor.RED}[Erro ao abrir]: {e}{Cor.RESET}")
 
 def encontrar_legenda(nome_extraido, dicionario_mapa):
     nome_ext = nome_extraido.upper().strip()
-    if nome_ext in ["---", ""]: 
-        return "---"
-        
+    if nome_ext in ["---", ""]: return "---"
     for nome_guerra, dados in dicionario_mapa.items():
         if nome_guerra in nome_ext or nome_ext in nome_guerra:
             return dados["legenda"]
-            
     return "???"
 
-# --- PROCESSAMENTO DE PDF (VERIFICADOR LRO) ---
+
+# --- PROCESSAMENTO DE PDF ---
 def verificar_assinatura_estrutural(caminho_pdf):
-    if not PYPDF_ENABLED: 
-        return False
+    if not PYPDF_ENABLED: return False
     try:
         reader = PdfReader(caminho_pdf)
         if reader.get_fields():
             for field in reader.get_fields().values():
-                if field.field_type == "/Sig":
-                    return True
+                if field.field_type == "/Sig": return True
         for page in reader.pages:
             if "/Annots" in page:
                 for annot in page["/Annots"]:
                     obj = annot.get_object()
-                    if obj.get("/FT") == "/Sig":
-                        return True
-    except Exception:
-        pass
+                    if obj.get("/FT") == "/Sig": return True
+    except Exception: pass
     return False
 
 def analisar_conteudo_lro(caminho_pdf):
@@ -170,7 +178,6 @@ def analisar_conteudo_lro(caminho_pdf):
         "equipe": {"smc": "---", "bct": "---", "oea": "---"},
         "assinatura": verificar_assinatura_estrutural(caminho_pdf)
     }
-
     if PLUMBER_ENABLED:
         try:
             with pdfplumber.open(caminho_pdf) as pdf:
@@ -179,11 +186,8 @@ def analisar_conteudo_lro(caminho_pdf):
                 
                 if not dados["assinatura"] and "validar.iti.gov.br" in texto_linear.lower():
                     dados["assinatura"] = True
-
                 extrair_dados_texto(texto_linear, dados)
-        except Exception:
-            pass
-
+        except Exception: pass
     return dados
 
 def extrair_dados_texto(texto_linear, dados):
@@ -198,12 +202,10 @@ def extrair_dados_texto(texto_linear, dados):
     if match_passei: dados["passou"] = match_passei.group(1).strip()
 
     match_resp_gov = re.search(r"validar\.iti\.gov\.br\s+([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ a-z]+?)\s*-", texto_linear, re.IGNORECASE)
-    if match_resp_gov:
-        dados["responsavel"] = match_resp_gov.group(1).strip().upper()
+    if match_resp_gov: dados["responsavel"] = match_resp_gov.group(1).strip().upper()
     else:
         match_resp_txt = re.search(r"ordens em vigor\.\s*([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ a-z]+?)\s*-", texto_linear, re.IGNORECASE)
-        if match_resp_txt:
-            dados["responsavel"] = match_resp_txt.group(1).strip().upper()
+        if match_resp_txt: dados["responsavel"] = match_resp_txt.group(1).strip().upper()
 
     match_bloco = re.search(r"EQUIPE DE SERVIÇO:(.*?)3\.", texto_linear, re.IGNORECASE)
     if match_bloco:
@@ -223,8 +225,7 @@ def buscar_arquivos_flexivel(pasta, data_string, turno):
         f"{data_string} {turno}TURNO*"
     ]
     encontrados = []
-    for p in padroes:
-        encontrados.extend(glob.glob(os.path.join(pasta, p)))
+    for p in padroes: encontrados.extend(glob.glob(os.path.join(pasta, p)))
     return list(set(encontrados))
 
 def calcular_turnos_validos(dia, mes_str, dia_atual, mes_atual, hora_atual):
@@ -237,67 +238,59 @@ def calcular_turnos_validos(dia, mes_str, dia_atual, mes_atual, hora_atual):
 
 def corrigir_anos_errados(lista_ano_errado, ano_curto, ano_errado):
     if not lista_ano_errado: return
-    resposta = input(f"{Cor.DARK_RED}Corrigir {len(lista_ano_errado)} anos errados? (S/N): {Cor.RESET}").lower()
-    if resposta in ['s', 'ok']:
+    if pedir_confirmacao(f"{Cor.DARK_RED}Corrigir {len(lista_ano_errado)} anos errados? (S/Enter p/ Sim, ESC p/ Pular): {Cor.RESET}"):
         for arq in lista_ano_errado:
             abrir_arquivo(arq)
-            if input(f"   Renomear {os.path.basename(arq)}? (S/OK): ").lower() in ['s', 'ok']:
+            if pedir_confirmacao(f"   Renomear {os.path.basename(arq)}? (S/Enter p/ Sim, ESC p/ Não): "):
                 try: 
                     os.rename(arq, arq.replace(ano_errado, ano_curto))
                     print(f"{Cor.GREEN}   Renomeado com sucesso.{Cor.RESET}")
-                except Exception as e: 
-                    print(f"{Cor.RED}   Erro ao renomear: {e}{Cor.RESET}")
+                except Exception as e: print(f"{Cor.RED}   Erro ao renomear: {e}{Cor.RESET}")
 
 def processo_verificacao_visual(lista_pendentes):
     if not lista_pendentes: return
     print(f"{Cor.CYAN}Verificar {len(lista_pendentes)} livros pendentes?{Cor.RESET}")
-    if input("Iniciar UM POR UM? (S/N): ").lower() not in ['s', 'ok']: return
+    if not pedir_confirmacao("Iniciar UM POR UM? (S/Enter p/ Sim, ESC p/ Pular): "): return
 
     for cnt, item in enumerate(lista_pendentes, start=1):
         caminho, data_str, turno = item['path'], item['data'], item['turno']
         nome_atual = os.path.basename(caminho)
-        
         print(f"\n{Cor.YELLOW}--- ({cnt}/{len(lista_pendentes)}) ---{Cor.RESET}")
         print(f"{Cor.CYAN}Arquivo: {nome_atual}{Cor.RESET}")
-        
         abrir_arquivo(caminho)
         print(f"{Cor.GREY}A analisar estrutura e texto...{Cor.RESET}")
         info = analisar_conteudo_lro(caminho)
-        
         exibir_dados_analise(info)
         
-        if input(">> Confirmar e assinar? (S/OK): ").lower() in ['s', 'ok']:
+        if pedir_confirmacao(">> Confirmar e assinar? (S/Enter p/ Sim, ESC p/ Não): "):
             dir_arq = os.path.dirname(caminho)
             extensao = os.path.splitext(caminho)[1]
             novo_nome_base = f"{data_str}_{turno}TURNO OK{extensao}"
             novo_caminho = os.path.join(dir_arq, novo_nome_base)
-            
             while True:
                 try:
                     os.rename(caminho, novo_caminho)
                     print(f"{Cor.GREEN}   [V] Validado e Padronizado: {novo_nome_base}{Cor.RESET}")
                     break
-                except PermissionError:
-                    input(f"{Cor.RED}   [!] Feche o arquivo PDF! Pressione Enter para tentar novamente.{Cor.RESET}")
-                except Exception as e:
-                    print(f"{Cor.RED}Erro: {e}{Cor.RESET}")
-                    break
-        else:
-            print(f"{Cor.GREY}   [-] Mantido.{Cor.RESET}")
+                except PermissionError: 
+                    if not pedir_confirmacao(f"{Cor.RED}   [!] Feche o arquivo PDF! S/Enter para tentar novamente, ESC para pular.{Cor.RESET}"):
+                        break
+                except Exception as e: print(f"{Cor.RED}Erro: {e}{Cor.RESET}"); break
+        else: print(f"{Cor.GREY}   [-] Mantido.{Cor.RESET}")
 
 def exibir_dados_analise(info):
     if not info: return
     print("-" * 60)
     print(f"📅 {Cor.GREEN}{info['cabecalho']}{Cor.RESET}")
     print(f"👤 RESPONSÁVEL: {Cor.CYAN}{info['responsavel']}{Cor.RESET}")
-    
-    if info['assinatura']:
-        print(f"🔏 ASSINATURA: {Cor.GREEN}OK (Certificado Digital Detectado) ✅{Cor.RESET}")
-    else:
-        print(f"🔏 ASSINATURA: {Cor.RED}NÃO DETECTADA NA ESTRUTURA ❌{Cor.RESET}")
+    if info['assinatura']: print(f"🔏 ASSINATURA: {Cor.GREEN}OK (Certificado Digital Detectado) ✅{Cor.RESET}")
+    else: print(f"🔏 ASSINATURA: {Cor.RED}NÃO DETECTADA NA ESTRUTURA ❌{Cor.RESET}")
     print("-" * 60)
+    
+    # Espaçamento corrigido conforme solicitado!
     print(f"⬅️ Recebeu: {info['recebeu']}")
     print(f"➡️ Passou:  {info['passou']}")
+    
     print(f"{Cor.WHITE}👥 Equipe:{Cor.RESET}")
     print(f"   • SMC: {info['equipe']['smc']}")
     print(f"   • BCT: {info['equipe']['bct']}")
@@ -351,22 +344,17 @@ def modulo_verificador_lro():
         print("-" * 60)
 
         problemas = 0
-        relatorio = []
-        lista_pendentes = [] 
-        lista_para_criar = []
-        lista_ano_errado = []
+        relatorio, lista_pendentes, lista_para_criar, lista_ano_errado = [], [], [], []
 
         for dia in range(1, qtd_dias + 1):
             dia_fmt = f"{dia:02d}"
             data_str = f"{dia_fmt}{mes}{ano_curto}"
             data_str_err = f"{dia_fmt}{mes}{ano_errado}"
-
             turnos = calcular_turnos_validos(dia, mes, agora.day, mes_atual, agora.hour)
 
             for turno in turnos:
                 arquivos_turno = buscar_arquivos_flexivel(path_mes, data_str, turno)
                 arquivos_errados = buscar_arquivos_flexivel(path_mes, data_str_err, turno)
-
                 tem_ok = [f for f in arquivos_turno if "OK" in f.upper()]
                 tem_falta_ass = [f for f in arquivos_turno if "FALTA ASS" in f.upper()]
                 tem_falta_lro = [f for f in arquivos_turno if "FALTA LRO" in f.upper()]
@@ -406,7 +394,7 @@ def modulo_verificador_lro():
             print("-" * 30 + "\n")
 
         if lista_para_criar:
-            if input(f"{Cor.YELLOW}Criar arquivos FALTA LRO? (S/N): {Cor.RESET}").lower() in ['s', 'ok']:
+            if pedir_confirmacao(f"{Cor.YELLOW}Criar arquivos FALTA LRO? (S/Enter p/ Sim, ESC p/ Não): {Cor.RESET}"):
                 for i in lista_para_criar:
                     n = f"{i['str']}_{i['turno']}TURNO FALTA LRO ().txt"
                     try: 
@@ -416,7 +404,7 @@ def modulo_verificador_lro():
 
         processo_verificacao_visual(lista_pendentes)
 
-        if input("\nVerificar outro mês? (S/Enter para voltar ao menu): ").lower() not in ['s', 'ok']: 
+        if not pedir_confirmacao(f"\n{Cor.YELLOW}Verificar outro mês? (S/Enter p/ Sim, ESC p/ Voltar ao menu): {Cor.RESET}"): 
             break
 
 
@@ -443,84 +431,107 @@ def modulo_escala_cumprida():
         ano_curto = inp_ano if inp_ano else ano_atual_curto
         ano_longo = "20" + ano_curto
 
-        path_ano = os.path.join(Config.CAMINHO_RAIZ, f"LRO {ano_longo}")
-        if os.name != 'nt' and not os.path.exists(path_ano): path_ano = Config.CAMINHO_RAIZ 
+        # Loop interno para permitir verificar outras especialidades do mesmo mês
+        while True:
+            limpar_tela()
+            print(f"{Cor.ORANGE}=== SISTEMA LRO - Escala Cumprida ({mes}/{ano_curto}) ==={Cor.RESET}")
+            print(f"\n{Cor.CYAN}Qual escala deseja gerar?{Cor.RESET}")
+            print("  [1] SMC")
+            print("  [2] BCT")
+            print("  [3] OEA")
+            print("  [0] Voltar ao Menu")
+            opcao_escala = input("\nOpção: ")
             
-        path_mes = os.path.join(path_ano, Config.MAPA_PASTAS.get(mes, "X"))
-        if os.name != 'nt': path_mes = "." 
-
-        if not os.path.exists(path_mes) and os.name == 'nt':
-            print(f"{Cor.RED}Pasta do mês não encontrada ({path_mes}).{Cor.RESET}"); time.sleep(2); continue
-
-        try: 
-            qtd_dias = calendar.monthrange(int(ano_longo), int(mes))[1]
-        except Exception: 
-            continue
-            
-        if mes == mes_atual and ano_curto == ano_atual_curto: 
-            qtd_dias = agora.day
-
-        print(f"\n{Cor.GREY}Extraindo dados de forma invisível... Aguarde.{Cor.RESET}\n")
-
-        # Cabeçalho da Tabela Refatorado
-        print(f"{Cor.bg_BLUE}{Cor.WHITE} DIA | SMC | BCT1 | BCT2 | BCT3 | OEA1 | OEA2 | OEA3 {Cor.RESET}")
-
-        for dia in range(1, qtd_dias + 1):
-            dia_fmt = f"{dia:02d}"
-            data_str = f"{dia_fmt}{mes}{ano_curto}"
-            
-            turnos = calcular_turnos_validos(dia, mes, agora.day, mes_atual, agora.hour)
-
-            # Memória temporária para os dados do dia
-            dia_dados = {
-                'smc': '---',
-                'bct': {1: '---', 2: '---', 3: '---'},
-                'oea': {1: '---', 2: '---', 3: '---'}
-            }
-
-            for turno in turnos:
-                arquivos = buscar_arquivos_flexivel(path_mes, data_str, turno)
+            if opcao_escala == '0':
+                return # Sai completamente para o menu principal
                 
-                if not arquivos:
-                    continue
+            if opcao_escala not in ['1', '2', '3']:
+                print(f"{Cor.RED}Opção inválida! Tente novamente.{Cor.RESET}")
+                time.sleep(1.5)
+                continue
 
-                arquivos_ok = [f for f in arquivos if "OK" in f.upper()]
-                arquivo_alvo = arquivos_ok[0] if arquivos_ok else arquivos[0]
+            path_ano = os.path.join(Config.CAMINHO_RAIZ, f"LRO {ano_longo}")
+            if os.name != 'nt' and not os.path.exists(path_ano): path_ano = Config.CAMINHO_RAIZ 
                 
-                if "FALTA LRO" in arquivo_alvo.upper() and arquivo_alvo.endswith('.txt'):
-                    dia_dados['bct'][turno] = 'PND'
-                    dia_dados['oea'][turno] = 'PND'
-                    continue
+            path_mes = os.path.join(path_ano, Config.MAPA_PASTAS.get(mes, "X"))
+            if os.name != 'nt': path_mes = "." 
 
-                info = analisar_conteudo_lro(arquivo_alvo)
+            if not os.path.exists(path_mes) and os.name == 'nt':
+                print(f"{Cor.RED}Pasta do mês não encontrada ({path_mes}).{Cor.RESET}"); time.sleep(2); break
+
+            try: 
+                qtd_dias = calendar.monthrange(int(ano_longo), int(mes))[1]
+            except Exception: 
+                break
                 
-                if info:
-                    leg_smc = encontrar_legenda(info['equipe']['smc'], mapa_smc)
+            if mes == mes_atual and ano_curto == ano_atual_curto: 
+                qtd_dias = agora.day
+
+            print(f"\n{Cor.GREY}Extraindo dados de forma invisível... Aguarde.{Cor.RESET}\n")
+
+            if opcao_escala == '1':
+                print(f"{Cor.bg_BLUE}{Cor.WHITE} DIA | SEM |  SMC  {Cor.RESET}")
+                tracos_separador = 19
+            elif opcao_escala in ['2', '3']:
+                print(f"{Cor.bg_BLUE}{Cor.WHITE} DIA | SEM | 1º TURNO | 2º TURNO | 3º TURNO {Cor.RESET}")
+                tracos_separador = 45
+
+            for dia in range(1, qtd_dias + 1):
+                dia_fmt = f"{dia:02d}"
+                data_str = f"{dia_fmt}{mes}{ano_curto}"
+                
+                data_dt = datetime.date(int(ano_longo), int(mes), dia)
+                sigla_sem = Config.MAPA_SEMANA[data_dt.weekday()]
+                
+                turnos = calcular_turnos_validos(dia, mes, agora.day, mes_atual, agora.hour)
+
+                dia_dados = {
+                    'smc': '---',
+                    'bct': {1: '---', 2: '---', 3: '---'},
+                    'oea': {1: '---', 2: '---', 3: '---'}
+                }
+
+                for turno in turnos:
+                    arquivos = buscar_arquivos_flexivel(path_mes, data_str, turno)
+                    if not arquivos: continue
+
+                    arquivos_ok = [f for f in arquivos if "OK" in f.upper()]
+                    arquivo_alvo = arquivos_ok[0] if arquivos_ok else arquivos[0]
                     
-                    # Fixa o SMC no primeiro turno que for encontrado e válido
-                    if dia_dados['smc'] == '---' and leg_smc not in ['---', '???']:
-                        dia_dados['smc'] = leg_smc
-                    # Fallback caso o único SMC encontrado for desconhecido (???)
-                    elif dia_dados['smc'] == '---':
-                        dia_dados['smc'] = leg_smc
-                        
-                    dia_dados['bct'][turno] = encontrar_legenda(info['equipe']['bct'], mapa_bct)
-                    dia_dados['oea'][turno] = encontrar_legenda(info['equipe']['oea'], mapa_oea)
-                else:
-                    dia_dados['bct'][turno] = 'ERR'
-                    dia_dados['oea'][turno] = 'ERR'
+                    if "FALTA LRO" in arquivo_alvo.upper() and arquivo_alvo.endswith('.txt'):
+                        dia_dados['bct'][turno] = 'PND'
+                        dia_dados['oea'][turno] = 'PND'
+                        continue
 
-            # Imprimir a linha consolidada do dia
-            smc = dia_dados['smc']
-            b1, b2, b3 = dia_dados['bct'][1], dia_dados['bct'][2], dia_dados['bct'][3]
-            o1, o2, o3 = dia_dados['oea'][1], dia_dados['oea'][2], dia_dados['oea'][3]
+                    info = analisar_conteudo_lro(arquivo_alvo)
+                    if info:
+                        leg_smc = encontrar_legenda(info['equipe']['smc'], mapa_smc)
+                        if dia_dados['smc'] == '---' and leg_smc not in ['---', '???']:
+                            dia_dados['smc'] = leg_smc
+                        elif dia_dados['smc'] == '---':
+                            dia_dados['smc'] = leg_smc
+                            
+                        dia_dados['bct'][turno] = encontrar_legenda(info['equipe']['bct'], mapa_bct)
+                        dia_dados['oea'][turno] = encontrar_legenda(info['equipe']['oea'], mapa_oea)
+                    else:
+                        dia_dados['bct'][turno] = 'ERR'
+                        dia_dados['oea'][turno] = 'ERR'
+
+                if opcao_escala == '1':
+                    smc = dia_dados['smc']
+                    print(f" {dia_fmt}  | {sigla_sem} |  {smc:^3}  ")
+                elif opcao_escala == '2':
+                    b1, b2, b3 = dia_dados['bct'][1], dia_dados['bct'][2], dia_dados['bct'][3]
+                    print(f" {dia_fmt}  | {sigla_sem} |   {b1:^4}   |   {b2:^4}   |   {b3:^4}   ")
+                elif opcao_escala == '3':
+                    o1, o2, o3 = dia_dados['oea'][1], dia_dados['oea'][2], dia_dados['oea'][3]
+                    print(f" {dia_fmt}  | {sigla_sem} |   {o1:^4}   |   {o2:^4}   |   {o3:^4}   ")
+
+            print("-" * tracos_separador)
             
-            print(f" {dia_fmt}  | {smc:^3} | {b1:^4} | {b2:^4} | {b3:^4} | {o1:^4} | {o2:^4} | {o3:^4} ")
-
-        print("-" * 62)
-        
-        if input(f"{Cor.YELLOW}Verificar Escala de outro mês? (S/Enter para voltar ao menu): {Cor.RESET}").lower() not in ['s', 'ok']: 
-            break
+            # Pergunta instantânea: S / Enter continua neste mês, ESC volta ao menu.
+            if not pedir_confirmacao(f"\n{Cor.YELLOW}Verificar outra especialidade deste mês? (S/Enter p/ Sim, ESC p/ Voltar ao menu): {Cor.RESET}"):
+                return # Volta ao menu principal
 
 
 # ==========================================
