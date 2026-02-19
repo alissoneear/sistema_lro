@@ -1,2 +1,20 @@
-# Ignorar a pasta ARQUIVOS
+# Arquivos temporários do Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Pastas geradas pelo PyInstaller (Compilação)
+build/
+dist/
+*.spec
+
+# Pastas de ambiente virtual (se usar)
+venv/
+env/
+
+# Arquivos de sistema
+.DS_Store
+Thumbs.db
+
+# Pasta de arquivos de teste locais (opcional)
 ARQUIVOS/

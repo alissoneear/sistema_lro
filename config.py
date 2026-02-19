@@ -1,7 +1,8 @@
 import os
 
 class Config:
-    CAMINHO_RAIZ = r"E:\dev\sistema_lro\ARQUIVOS" if os.name == 'nt' else "."
+    #CAMINHO_RAIZ = r"E:\dev\sistema_lro\ARQUIVOS" if os.name == 'nt' else "."
+    CAMINHO_RAIZ = r"R:\DO\COI\ARCC-CW\14 - LRO"
     
     MAPA_PASTAS = {
         "01": "1 - JANEIRO",   "02": "2 - FEVEREIRO", "03": "3 - MARÇO", "04": "4 - ABRIL",
