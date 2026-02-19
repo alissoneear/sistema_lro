@@ -2,9 +2,10 @@ import os
 import time
 import datetime
 import calendar
+import re
 
-# Importa as configurações e utilitários da pasta principal
-from config import Config, Cor
+# Adicionado o DadosEfetivo aqui nas importações!
+from config import Config, Cor, DadosEfetivo 
 import utils
 
 def corrigir_anos_errados(lista_ano_errado, ano_curto, ano_errado):
@@ -28,11 +29,24 @@ def exibir_dados_analise(info):
     print("-" * 60)
     print(f"⬅️ Recebeu: {info['recebeu']}")
     print(f"➡️ Passou:  {info['passou']}")
-    print(f"{Cor.WHITE}👥 Equipe:{Cor.RESET}")
+    print(f"{Cor.WHITE}👥 Equipa:{Cor.RESET}")
     print(f"   • SMC: {info['equipe']['smc']}")
     print(f"   • BCT: {info['equipe']['bct']}")
     print(f"   • OEA: {info['equipe']['oea']}")
     print("-" * 60)
+
+def renomear_arquivo(caminho_atual, novo_caminho):
+    while True:
+        try:
+            os.rename(caminho_atual, novo_caminho)
+            print(f"{Cor.GREEN}   [V] Validado e Padronizado: {os.path.basename(novo_caminho)}{Cor.RESET}")
+            break
+        except PermissionError: 
+            if not utils.pedir_confirmacao(f"{Cor.RED}   [!] Feche o ficheiro PDF! S/Enter p/ tentar novamente, ESC p/ pular.{Cor.RESET}"):
+                break
+        except Exception as e: 
+            print(f"{Cor.RED}Erro: {e}{Cor.RESET}")
+            break
 
 def processo_verificacao_visual(lista_pendentes):
     if not lista_pendentes: return
@@ -49,21 +63,52 @@ def processo_verificacao_visual(lista_pendentes):
         info = utils.analisar_conteudo_lro(caminho)
         exibir_dados_analise(info)
         
-        if utils.pedir_confirmacao(">> Confirmar e assinar? (S/Enter p/ Sim, ESC p/ Não): "):
-            dir_arq = os.path.dirname(caminho)
-            extensao = os.path.splitext(caminho)[1]
-            novo_nome_base = f"{data_str}_{turno}TURNO OK{extensao}"
-            novo_caminho = os.path.join(dir_arq, novo_nome_base)
-            while True:
-                try:
-                    os.rename(caminho, novo_caminho)
-                    print(f"{Cor.GREEN}   [V] Validado e Padronizado: {novo_nome_base}{Cor.RESET}")
-                    break
-                except PermissionError: 
-                    if not utils.pedir_confirmacao(f"{Cor.RED}   [!] Feche o ficheiro PDF! S/Enter para tentar novamente, ESC para pular.{Cor.RESET}"):
-                        break
-                except Exception as e: print(f"{Cor.RED}Erro: {e}{Cor.RESET}"); break
-        else: print(f"{Cor.GREY}   [-] Mantido.{Cor.RESET}")
+        dir_arq = os.path.dirname(caminho)
+        extensao = os.path.splitext(caminho)[1]
+        
+        if info['assinatura']:
+            if utils.pedir_confirmacao(">> Confirmar e assinar OK? (S/Enter p/ Sim, ESC p/ Não): "):
+                novo_nome_base = f"{data_str}_{turno}TURNO OK{extensao}"
+                novo_caminho = os.path.join(dir_arq, novo_nome_base)
+                renomear_arquivo(caminho, novo_caminho)
+            else:
+                print(f"{Cor.GREY}   [-] Mantido.{Cor.RESET}")
+        else:
+            resp_base = utils.extrair_nome_base(info.get('responsavel', ''))
+            sugestao_str = f" ({resp_base})" if resp_base not in ["---", "???", ""] else ""
+            
+            msg = f">> {Cor.RED}ASSINATURA AUSENTE!{Cor.RESET} Renomear p/ FALTA ASS{sugestao_str}? (S/Enter p/ Sim, ESC p/ Não): "
+            if utils.pedir_confirmacao(msg):
+                novo_nome_base = f"{data_str}_{turno}TURNO FALTA ASS{sugestao_str}{extensao}"
+                novo_caminho = os.path.join(dir_arq, novo_nome_base)
+                renomear_arquivo(caminho, novo_caminho)
+            else:
+                print(f"{Cor.GREY}   [-] Mantido.{Cor.RESET}")
+
+# --- FUNÇÃO INTELIGENTE DE EXTRAÇÃO DE NOME ---
+def extrair_nome_relato(raw_str):
+    """Procura o nome oficial do militar dentro do texto sujo do PDF usando o Dicionário."""
+    if not raw_str or raw_str in ["---", "???"]: return "???"
+    
+    # 1. Normaliza o texto (tira acentos, converte 'IS' para '1S', etc.)
+    texto_norm = utils.normalizar_texto(raw_str)
+    
+    # 2. Carrega todos os nomes de guerra conhecidos
+    mapa_smc, mapa_bct, mapa_oea = DadosEfetivo.mapear_efetivo()
+    todos_mapas = {**mapa_smc, **mapa_bct, **mapa_oea}
+    
+    # 3. Extrai apenas as "essências" (GIOVANNI, SAULO, RUI, etc.)
+    nomes_base = [utils.extrair_nome_base(ng) for ng in todos_mapas.keys()]
+    
+    # 4. Ordena por tamanho (os nomes maiores primeiro) para evitar falsos positivos
+    nomes_base.sort(key=len, reverse=True)
+    
+    # 5. Varre a frase. Usamos \b (Word Boundary) para não confundir "RUI" dentro de "ARUINADO"
+    for nome_base in nomes_base:
+        if re.search(rf'\b{re.escape(nome_base)}\b', texto_norm):
+            return nome_base
+            
+    return "???"
 
 def executar():
     if os.name == 'nt' and not os.path.exists(Config.CAMINHO_RAIZ):
@@ -132,7 +177,7 @@ def executar():
                     print(f"{Cor.DARK_YELLOW}[!] LRO FEITO (TXT PRESENTE): {os.path.basename(tem_novo[0])}{Cor.RESET}")
                     lista_pendentes.append({'path': tem_novo[0], 'data': data_str, 'turno': turno}); problemas += 1
                 elif tem_falta_lro:
-                    print(f"{Cor.MAGENTA}[!] NÃO CONFECIONADO: {os.path.basename(tem_falta_lro[0])}{Cor.RESET}")
+                    print(f"{Cor.MAGENTA}[!] NÃO CONFECCIONADO: {os.path.basename(tem_falta_lro[0])}{Cor.RESET}")
                     relatorio.append(os.path.basename(tem_falta_lro[0])); problemas += 1
                 elif tem_novo:
                     n = os.path.basename(tem_novo[0])
@@ -145,7 +190,11 @@ def executar():
                 else:
                     print(f"{Cor.RED}[X] INEXISTENTE: {data_str} - {turno}º Turno{Cor.RESET}")
                     relatorio.append(f"Dia {dia_fmt} - {turno}º Turno: NÃO ENCONTRADO"); problemas += 1
-                    lista_para_criar.append({"str": data_str, "turno": turno})
+                    
+                    lista_para_criar.append({
+                        "str": data_str, "turno": turno, 
+                        "dia": dia, "mes": mes, "ano": ano_longo
+                    })
 
         print("-" * 60)
         if problemas == 0: print(f"{Cor.GREEN}Tudo em dia!{Cor.RESET}\n")
@@ -158,13 +207,69 @@ def executar():
             print("-" * 30 + "\n")
 
         if lista_para_criar:
-            if utils.pedir_confirmacao(f"{Cor.YELLOW}Criar ficheiros FALTA LRO? (S/Enter p/ Sim, ESC p/ Não): {Cor.RESET}"):
-                for i in lista_para_criar:
-                    n = f"{i['str']}_{i['turno']}TURNO FALTA LRO ().txt"
+            print(f"\n{Cor.CYAN}--- GERAÇÃO INTELIGENTE DE ARQUIVOS 'FALTA LRO' ---{Cor.RESET}")
+            for item in lista_para_criar:
+                data_str = item['str']
+                turno = item['turno']
+                dt_atual = datetime.date(int(item['ano']), int(item['mes']), item['dia'])
+                
+                # Calcular Turno Anterior e Seguinte
+                if turno == 1:
+                    dt_prev, tr_prev = dt_atual - datetime.timedelta(days=1), 3
+                    dt_next, tr_next = dt_atual, 2
+                elif turno == 2:
+                    dt_prev, tr_prev = dt_atual, 1
+                    dt_next, tr_next = dt_atual, 3
+                else:
+                    dt_prev, tr_prev = dt_atual, 2
+                    dt_next, tr_next = dt_atual + datetime.timedelta(days=1), 1
+                
+                def get_path_mes(dt):
+                    if os.name != 'nt': return "."
+                    path_a = os.path.join(Config.CAMINHO_RAIZ, f"LRO {dt.strftime('%Y')}")
+                    return os.path.join(path_a, Config.MAPA_PASTAS.get(dt.strftime('%m'), "X"))
+
+                # Alterado para usar a nova função de extração pelo dicionário
+                def get_nome_adjacente(dt, tr, is_prev):
+                    p_mes = get_path_mes(dt)
+                    d_str = f"{dt.day:02d}{dt.strftime('%m')}{dt.strftime('%y')}"
+                    arquivos = utils.buscar_arquivos_flexivel(p_mes, d_str, tr)
+                    
+                    # Filtra apenas os PDFs (para não tentar ler arquivos .txt de 'FALTA LRO')
+                    pdfs = [f for f in arquivos if f.lower().endswith('.pdf')]
+                    
+                    if pdfs:
+                        # Dá prioridade aos que já têm OK, mas se não tiver, lê o PDF pendente mesmo assim!
+                        ok_files = [f for f in pdfs if "OK" in f.upper()]
+                        arquivo_alvo = ok_files[0] if ok_files else pdfs[0]
+                        
+                        info = utils.analisar_conteudo_lro(arquivo_alvo)
+                        raw = info.get('passou', '') if is_prev else info.get('recebeu', '')
+                        return extrair_nome_relato(raw)
+                    return "???"
+
+                passou_nome = get_nome_adjacente(dt_prev, tr_prev, True)  
+                recebeu_nome = get_nome_adjacente(dt_next, tr_next, False) 
+                
+                if passou_nome == "???" and recebeu_nome == "???": sugestao = ""
+                elif passou_nome == recebeu_nome: sugestao = passou_nome
+                elif passou_nome != "???" and recebeu_nome == "???": sugestao = passou_nome
+                elif passou_nome == "???" and recebeu_nome != "???": sugestao = recebeu_nome
+                else: sugestao = f"{passou_nome} ou {recebeu_nome}"
+                    
+                sugestao_str = f" ({sugestao})" if sugestao else " ()"
+                novo_nome = f"{data_str}_{turno}TURNO FALTA LRO{sugestao_str}.txt"
+                
+                print(f"\n{Cor.YELLOW}[FALTA LRO] {data_str} - {turno}º Turno{Cor.RESET}")
+                print(f" ⬅️  Turno anterior passou para: {Cor.CYAN}{passou_nome}{Cor.RESET}")
+                print(f" ➡️  Turno seguinte recebeu de:  {Cor.CYAN}{recebeu_nome}{Cor.RESET}")
+                
+                if utils.pedir_confirmacao(f">> Criar arquivo '{novo_nome}'? (S/Enter p/ Sim, ESC p/ Pular): "):
                     try: 
-                        with open(os.path.join(path_mes, n), 'w') as f: f.write("Falta")
-                        print(f"{Cor.GREEN}   [V] Criado: {n}{Cor.RESET}")
-                    except Exception as e: print(f"{Cor.RED}   Erro ao criar {n}: {e}{Cor.RESET}")
+                        with open(os.path.join(path_mes, novo_nome), 'w') as f: f.write("Falta")
+                        print(f"{Cor.GREEN}   [V] Criado com sucesso.{Cor.RESET}")
+                    except Exception as e: 
+                        print(f"{Cor.RED}   Erro ao criar: {e}{Cor.RESET}")
 
         processo_verificacao_visual(lista_pendentes)
 

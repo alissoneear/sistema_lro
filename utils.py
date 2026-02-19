@@ -129,11 +129,23 @@ def extrair_dados_texto(texto_linear, dados):
     if match_data:
         dados["cabecalho"] = f"dia {match_data.group(2)} de {match_data.group(3)} de {match_data.group(1)} turno {match_data.group(4)}"
     
-    match_recebi = re.search(r"(Recebi-o\s+(?:aos|às|as).*?)((?:,|\.|ciente))", texto_linear, re.IGNORECASE)
-    if match_recebi: dados["recebeu"] = match_recebi.group(1).strip()
+    # 1. NOVO: Captura o Bloco Inteiro do RECEBIMENTO (Item 1)
+    match_bloco_recebeu = re.search(r"RECEBIMENTO DO SERVI[CÇ]O:(.*?)(?:2\.\s*EQUIPE|EQUIPE DE SERVI[CÇ]O)", texto_linear, re.IGNORECASE)
+    if match_bloco_recebeu: 
+        dados["recebeu"] = match_bloco_recebeu.group(1).strip()
+    else:
+        # Fallback de segurança
+        match_recebi = re.search(r"(Recebi-o[\s\S]*?vigor\.?)", texto_linear, re.IGNORECASE)
+        if match_recebi: dados["recebeu"] = match_recebi.group(1).strip()
 
-    match_passei = re.search(r"(Passei-o\s+(?:aos|às|as).*?)((?:,|\.|cientificando))", texto_linear, re.IGNORECASE)
-    if match_passei: dados["passou"] = match_passei.group(1).strip()
+    # 2. NOVO: Captura o Bloco Inteiro da PASSAGEM (Item 4)
+    match_bloco_passou = re.search(r"PASSAGEM DE SERVI[CÇ]O:(.*?)(?:gov\.br|Documento assinado|Asas que|$)", texto_linear, re.IGNORECASE)
+    if match_bloco_passou: 
+        dados["passou"] = match_bloco_passou.group(1).strip()
+    else:
+        # Fallback de segurança
+        match_passei = re.search(r"(Passei-o[\s\S]*?vigor\.?)", texto_linear, re.IGNORECASE)
+        if match_passei: dados["passou"] = match_passei.group(1).strip()
 
     match_resp_gov = re.search(r"validar\.iti\.gov\.br\s+([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ a-z]+?)\s*-", texto_linear, re.IGNORECASE)
     if match_resp_gov: dados["responsavel"] = match_resp_gov.group(1).strip().upper()
@@ -144,9 +156,8 @@ def extrair_dados_texto(texto_linear, dados):
     match_bloco = re.search(r"EQUIPE DE SERVI[CÇ]O:(.*?)3\.", texto_linear, re.IGNORECASE)
     if match_bloco:
         txt_eq = match_bloco.group(1)
-        dados["texto_equipe"] = txt_eq # Guardar APENAS este bloco para o fallback
+        dados["texto_equipe"] = txt_eq 
         
-        # Regex atualizada: Aceita [;,] (Vírgula ou Ponto-e-vírgula) e não quebra com espaços
         m_smc = re.search(r"(?:^|[;,])\s*(.*?)\s*(?:-|)\s*SMC", txt_eq, re.IGNORECASE)
         if m_smc: dados["equipe"]["smc"] = m_smc.group(1).strip()
         
