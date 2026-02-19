@@ -19,11 +19,12 @@ class Cor:
     MAGENTA = '\033[95m'
     DARK_YELLOW = '\033[33m'
     DARK_RED = '\033[31m'
-    bg_BLUE = '\033[44m'
     WHITE = '\033[97m'
     GREY = '\033[90m'
     RESET = '\033[0m'
     ORANGE = '\033[38;5;208m'
+    bg_BLUE = '\033[44m'
+    bg_ORANGE = '\033[48;5;208m'
 
 class DadosEfetivo:
     legendas_oea = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I']

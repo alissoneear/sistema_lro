@@ -2,9 +2,95 @@ import os
 import time
 import datetime
 import calendar
+import re
 
 from config import Config, Cor, DadosEfetivo
 import utils
+
+def obter_info_militar(legenda, mapa_efetivo):
+    for nome_completo, dados in mapa_efetivo.items():
+        if dados['legenda'] == legenda:
+            partes = nome_completo.split()
+            if len(partes) >= 2:
+                if partes[1] in ['BCT', 'BCO', 'QSS', 'SMC']:
+                    return f"{partes[0]} {partes[2]}"
+                return f"{partes[0]} {partes[1]}"
+            return nome_completo
+    return legenda
+
+def get_sem(ano, mes, dia):
+    dt = datetime.date(int(ano), int(mes), int(dia))
+    return Config.MAPA_SEMANA[dt.weekday()]
+
+def verificar_e_propor_correcoes(escala_detalhada, mapa_efetivo, ano, mes):
+    inconsistencias = [] 
+    correcoes = []       
+    
+    dias = sorted(escala_detalhada.keys())
+    ignorar = ['---', '???', 'PND', 'ERR']
+    
+    def obter_legenda_pelo_nome(nome_guerra):
+        return utils.encontrar_legenda(nome_guerra, mapa_efetivo)
+
+    for i, dia in enumerate(dias):
+        dados_dia = escala_detalhada[dia]
+        dia_sem = get_sem(ano, mes, dia)
+        l1, l2, l3 = dados_dia[1]['legenda'], dados_dia[2]['legenda'], dados_dia[3]['legenda']
+        
+        # --- REGRA 1: DOBRA DE TURNO ---
+        violacao = None
+        turno_suspeito = None
+        if l1 not in ignorar and l1 == l2:
+            violacao = (1, 2, l1); turno_suspeito = 2
+        elif l2 not in ignorar and l2 == l3:
+            violacao = (2, 3, l2); turno_suspeito = 3
+
+        if violacao:
+            t_a, t_b, leg = violacao
+            nome_mil = obter_info_militar(leg, mapa_efetivo)
+            leg_ass = obter_legenda_pelo_nome(dados_dia[turno_suspeito]['assinatura_nome'])
+            
+            if leg_ass not in ['---', '???'] and leg_ass != leg:
+                # Caso de Erro de Digitação (Assinatura diferente da Equipe)
+                nome_correto = obter_info_militar(leg_ass, mapa_efetivo)
+                inconsistencias.append(f"⚠️ Dia {dia:02d} ({dia_sem}): Militar {nome_mil} ({leg}) em turnos seguidos ({t_a}º/{t_b}º).\n      ↳ 🕵️‍♂️ {Cor.GREEN}SOLUÇÃO:{Cor.RESET} O {t_b}ºT foi assinado por {nome_correto} ({leg_ass}). Erro de digitação.")
+                correcoes.append({'dia': dia, 'turno': turno_suspeito, 'nova_leg': leg_ass})
+            else:
+                # Caso de Violação Operacional Real (Assinatura confirma a Equipe)
+                inconsistencias.append(f"⚠️ Dia {dia:02d} ({dia_sem}): Militar {nome_mil} ({leg}) dobrou o turno ({t_a}º e {t_b}º).\n      ↳ ⚖️ {Cor.YELLOW}INFO:{Cor.RESET} Assinaturas confirmam que o militar realmente cumpriu ambos os turnos.")
+
+        # --- REGRA 2: FOLGA PÓS-3º TURNO ---
+        if i > 0:
+            dia_ant = dias[i-1]
+            dia_sem_ant = get_sem(ano, mes, dia_ant)
+            l3_ant = escala_detalhada[dia_ant][3]['legenda']
+            
+            if l3_ant not in ignorar:
+                turnos_hoje_violados = [t for t in [1, 2, 3] if escala_detalhada[dia][t]['legenda'] == l3_ant]
+                
+                if turnos_hoje_violados:
+                    str_turnos = " e ".join([f"{t}º" for t in turnos_hoje_violados])
+                    nome_mil = obter_info_militar(l3_ant, mapa_efetivo)
+                    pistas = []
+                    violation_real = True # Assume que é real até provar erro de assinatura
+
+                    for t_hoje in turnos_hoje_violados:
+                        leg_ass_hoje = obter_legenda_pelo_nome(escala_detalhada[dia][t_hoje]['assinatura_nome'])
+                        if leg_ass_hoje not in ['---', '???'] and leg_ass_hoje != l3_ant:
+                            nome_correto = obter_info_militar(leg_ass_hoje, mapa_efetivo)
+                            pistas.append(f"O LRO do dia {dia:02d} ({t_hoje}ºT) foi assinado por {nome_correto} ({leg_ass_hoje}).")
+                            correcoes.append({'dia': dia, 'turno': t_hoje, 'nova_leg': leg_ass_hoje})
+                            violation_real = False
+
+                    msg_auditoria = ""
+                    if pistas:
+                        msg_auditoria = f"\n      ↳ 🕵️‍♂️ {Cor.GREEN}SOLUÇÃO:{Cor.RESET} " + " ".join(pistas) + " Provável erro de digitação."
+                    elif violation_real:
+                        msg_auditoria = f"\n      ↳ ⚖️ {Cor.YELLOW}INFO:{Cor.RESET} Assinaturas confirmam que {nome_mil} cumpriu o serviço sem a folga regulamentar."
+
+                    inconsistencias.append(f"🚨 Dia {dia:02d} ({dia_sem}): Militar {nome_mil} ({l3_ant}) sem folga do dia {dia_ant:02d} ({dia_sem_ant}).{msg_auditoria}")
+                    
+    return inconsistencias, correcoes
 
 def executar():
     if os.name == 'nt' and not os.path.exists(Config.CAMINHO_RAIZ):
@@ -36,105 +122,119 @@ def executar():
             print("  [0] Voltar ao Menu")
             opcao_escala = input("\nOpção: ")
             
-            if opcao_escala == '0':
-                return 
-                
-            if opcao_escala not in ['1', '2', '3']:
-                print(f"{Cor.RED}Opção inválida! Tente novamente.{Cor.RESET}")
-                time.sleep(1.5)
-                continue
+            if opcao_escala == '0': return 
+            if opcao_escala not in ['1', '2', '3']: continue
 
             path_ano = os.path.join(Config.CAMINHO_RAIZ, f"LRO {ano_longo}")
             if os.name != 'nt' and not os.path.exists(path_ano): path_ano = Config.CAMINHO_RAIZ 
-                
             path_mes = os.path.join(path_ano, Config.MAPA_PASTAS.get(mes, "X"))
             if os.name != 'nt': path_mes = "." 
-
+            
             if not os.path.exists(path_mes) and os.name == 'nt':
-                print(f"{Cor.RED}Pasta do mês não encontrada ({path_mes}).{Cor.RESET}"); time.sleep(2); break
+                print(f"{Cor.RED}Pasta não encontrada.{Cor.RESET}"); time.sleep(2); break
 
-            try: 
-                qtd_dias = calendar.monthrange(int(ano_longo), int(mes))[1]
-            except Exception: 
-                break
-                
-            if mes == mes_atual and ano_curto == ano_atual_curto: 
-                qtd_dias = agora.day
+            try: qtd_dias = calendar.monthrange(int(ano_longo), int(mes))[1]
+            except: break
+            if mes == mes_atual and ano_curto == ano_atual_curto: qtd_dias = agora.day
 
-            print(f"\n{Cor.GREY}Extraindo dados de forma invisível... Aguarde.{Cor.RESET}\n")
+            print(f"\n{Cor.GREY}A processar dados e auditar inconsistências... Aguarde.{Cor.RESET}\n")
 
-            if opcao_escala == '1':
-                print(f"{Cor.bg_BLUE}{Cor.WHITE} DIA | SEM |  SMC  {Cor.RESET}")
-                tracos_separador = 19
-            elif opcao_escala in ['2', '3']:
-                print(f"{Cor.bg_BLUE}{Cor.WHITE} DIA | SEM | 1º TURNO | 2º TURNO | 3º TURNO {Cor.RESET}")
-                tracos_separador = 45
+            escala_detalhada = {}
+            mapa_ativo = mapa_bct if opcao_escala == '2' else mapa_oea 
 
             for dia in range(1, qtd_dias + 1):
                 dia_fmt = f"{dia:02d}"
                 data_str = f"{dia_fmt}{mes}{ano_curto}"
-                
-                data_dt = datetime.date(int(ano_longo), int(mes), dia)
-                sigla_sem = Config.MAPA_SEMANA[data_dt.weekday()]
-                
                 turnos = utils.calcular_turnos_validos(dia, mes, agora.day, mes_atual, agora.hour)
 
                 dia_dados = {
-                    'smc': '---',
-                    'bct': {1: '---', 2: '---', 3: '---'},
-                    'oea': {1: '---', 2: '---', 3: '---'}
+                    'smc': '---', 'bct': {1:'---',2:'---',3:'---'}, 'oea': {1:'---',2:'---',3:'---'},
+                    'meta': {1:{'assinatura_nome':'???'}, 2:{'assinatura_nome':'???'}, 3:{'assinatura_nome':'???'}}
                 }
 
                 for turno in turnos:
                     arquivos = utils.buscar_arquivos_flexivel(path_mes, data_str, turno)
                     if not arquivos: continue
-
-                    arquivos_ok = [f for f in arquivos if "OK" in f.upper()]
-                    arquivo_alvo = arquivos_ok[0] if arquivos_ok else arquivos[0]
-                    
-                    if "FALTA LRO" in arquivo_alvo.upper() and arquivo_alvo.endswith('.txt'):
-                        dia_dados['bct'][turno] = 'PND'
-                        dia_dados['oea'][turno] = 'PND'
+                    pdfs = [f for f in arquivos if f.lower().endswith('.pdf')]
+                    if not pdfs:
+                        if any("FALTA LRO" in f.upper() for f in arquivos):
+                            dia_dados['bct'][turno] = 'PND'; dia_dados['oea'][turno] = 'PND'
+                            dia_dados['meta'][turno]['assinatura_nome'] = 'PND'
                         continue
 
+                    arquivos_ok = [f for f in pdfs if "OK" in f.upper()]
+                    arquivo_alvo = arquivos_ok[0] if arquivos_ok else pdfs[0]
                     info = utils.analisar_conteudo_lro(arquivo_alvo)
                     if info:
-                        # 1. Busca normal via Regex
+                        resp_base = utils.extrair_nome_base(info.get('responsavel', ''))
+                        dia_dados['meta'][turno]['assinatura_nome'] = resp_base
+                        
                         leg_smc = utils.encontrar_legenda(info['equipe']['smc'], mapa_smc)
                         leg_bct = utils.encontrar_legenda(info['equipe']['bct'], mapa_bct)
                         leg_oea = utils.encontrar_legenda(info['equipe']['oea'], mapa_oea)
                         
-                        # 2. Busca Agressiva (Fallback) - MAS SÓ NO BLOCO DA EQUIPE!
-                        texto_busca_segura = info.get('texto_equipe', '') 
-                        if not texto_busca_segura: # Se falhar tudo, varre o doc inteiro
-                            texto_busca_segura = info['texto_completo']
+                        txt_busca = info.get('texto_equipe', '') or info['texto_completo']
+                        if leg_smc in ['---','???']: leg_smc = utils.encontrar_legenda_fallback(txt_busca, mapa_smc)
+                        if leg_bct in ['---','???']: leg_bct = utils.encontrar_legenda_fallback(txt_busca, mapa_bct)
+                        if leg_oea in ['---','???']: leg_oea = utils.encontrar_legenda_fallback(txt_busca, mapa_oea)
 
-                        if leg_smc in ['---', '???']: leg_smc = utils.encontrar_legenda_fallback(texto_busca_segura, mapa_smc)
-                        if leg_bct in ['---', '???']: leg_bct = utils.encontrar_legenda_fallback(texto_busca_segura, mapa_bct)
-                        if leg_oea in ['---', '???']: leg_oea = utils.encontrar_legenda_fallback(texto_busca_segura, mapa_oea)
-
-                        if dia_dados['smc'] == '---' and leg_smc not in ['---', '???']:
-                            dia_dados['smc'] = leg_smc
-                        elif dia_dados['smc'] == '---':
-                            dia_dados['smc'] = leg_smc
-                            
-                        dia_dados['bct'][turno] = leg_bct
-                        dia_dados['oea'][turno] = leg_oea
+                        if dia_dados['smc'] == '---' and leg_smc not in ['---', '???']: dia_dados['smc'] = leg_smc
+                        elif dia_dados['smc'] == '---': dia_dados['smc'] = leg_smc
+                        dia_dados['bct'][turno] = leg_bct; dia_dados['oea'][turno] = leg_oea
                     else:
-                        dia_dados['bct'][turno] = 'ERR'
-                        dia_dados['oea'][turno] = 'ERR'
+                        dia_dados['bct'][turno] = 'ERR'; dia_dados['oea'][turno] = 'ERR'
 
-                if opcao_escala == '1':
-                    smc = dia_dados['smc']
-                    print(f" {dia_fmt}  | {sigla_sem} |  {smc:^3}  ")
-                elif opcao_escala == '2':
-                    b1, b2, b3 = dia_dados['bct'][1], dia_dados['bct'][2], dia_dados['bct'][3]
-                    print(f" {dia_fmt}  | {sigla_sem} |   {b1:^4}   |   {b2:^4}   |   {b3:^4}   ")
-                elif opcao_escala == '3':
-                    o1, o2, o3 = dia_dados['oea'][1], dia_dados['oea'][2], dia_dados['oea'][3]
-                    print(f" {dia_fmt}  | {sigla_sem} |   {o1:^4}   |   {o2:^4}   |   {o3:^4}   ")
+                escala_detalhada[dia] = {}
+                for t in [1, 2, 3]:
+                    leg = dia_dados['bct'][t] if opcao_escala == '2' else dia_dados['oea'][t] if opcao_escala == '3' else '---'
+                    escala_detalhada[dia][t] = {'legenda': leg, 'assinatura_nome': dia_dados['meta'][t]['assinatura_nome']}
+                    if opcao_escala == '1' and t==1: escala_detalhada[dia]['smc'] = dia_dados['smc']
 
-            print("-" * tracos_separador)
+            # --- 2. AUDITORIA INICIAL ---
+            if opcao_escala in ['2', '3']:
+                inconsistencias, correcoes = verificar_e_propor_correcoes(escala_detalhada, mapa_ativo, ano_longo, mes)
+                
+                if inconsistencias:
+                    print(f"\n{Cor.bg_BLUE}{Cor.WHITE} 🔍 ANÁLISE PRÉVIA DE CONSISTÊNCIA {Cor.RESET}")
+                    for inc in inconsistencias: print(f"{Cor.RED}{inc}{Cor.RESET}")
+                    print("-" * 60)
+                    
+                    if correcoes:
+                        if utils.pedir_confirmacao(f"\n{Cor.YELLOW}>> Encontrei correções de digitação. Aplicar na tabela? (S/Enter p/ Sim, ESC p/ Não): {Cor.RESET}"):
+                            for c in correcoes:
+                                d, t, nl = c['dia'], c['turno'], c['nova_leg']
+                                escala_detalhada[d][t]['legenda'] = nl
+                            print(f"{Cor.GREEN}   [V] Correções de digitação aplicadas.{Cor.RESET}")
+                            time.sleep(1)
             
-            if not utils.pedir_confirmacao(f"\n{Cor.YELLOW}Verificar outra especialidade deste mês? (S/Enter p/ Sim, ESC p/ Voltar ao menu): {Cor.RESET}"):
+            # --- 3. IMPRIMIR TABELA ---
+            print("\n")
+            if opcao_escala == '1':
+                print(f"{Cor.bg_BLUE}{Cor.WHITE} DIA | SEM |  SMC  {Cor.RESET}"); tracos = 19
+            else:
+                print(f"{Cor.bg_BLUE}{Cor.WHITE} DIA | SEM | 1º TURNO | 2º TURNO | 3º TURNO {Cor.RESET}"); tracos = 45
+
+            for dia in range(1, qtd_dias + 1):
+                dt = datetime.date(int(ano_longo), int(mes), dia)
+                sigla_sem = Config.MAPA_SEMANA[dt.weekday()]
+                dia_fmt = f"{dia:02d}"
+                if opcao_escala == '1':
+                    print(f" {dia_fmt}  | {sigla_sem} |  {escala_detalhada[dia]['smc']:^3}  ")
+                else:
+                    l1, l2, l3 = escala_detalhada[dia][1]['legenda'], escala_detalhada[dia][2]['legenda'], escala_detalhada[dia][3]['legenda']
+                    print(f" {dia_fmt}  | {sigla_sem} |   {l1:^4}   |   {l2:^4}   |   {l3:^4}   ")
+
+            print("-" * tracos)
+
+            # --- 4. AUDITORIA FINAL (RESUMO) ---
+            if opcao_escala in ['2', '3']:
+                inc_final, _ = verificar_e_propor_correcoes(escala_detalhada, mapa_ativo, ano_longo, mes)
+                print("\n" + f"{Cor.bg_ORANGE}{Cor.WHITE} RESUMO DA AUDITORIA OPERACIONAL {Cor.RESET}".center(tracos + 10))
+                if inc_final:
+                    for inc in inc_final: print(f"{Cor.RED}{inc}{Cor.RESET}")
+                else:
+                    print(f"{Cor.GREEN}✅ Escala 100% consistente com as regras operacionais!{Cor.RESET}")
+                print("-" * tracos)
+
+            if not utils.pedir_confirmacao(f"\n{Cor.YELLOW}Verificar outra especialidade? (S/Enter p/ Sim, ESC p/ Voltar): {Cor.RESET}"):
                 return

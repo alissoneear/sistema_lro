@@ -29,7 +29,8 @@ def exibir_dados_analise(info):
     print("-" * 60)
     print(f"⬅️ Recebeu: {info['recebeu']}")
     print(f"➡️ Passou:  {info['passou']}")
-    print(f"{Cor.WHITE}👥 Equipa:{Cor.RESET}")
+    
+    print(f"{Cor.WHITE}👥 Equipe:{Cor.RESET}") 
     print(f"   • SMC: {info['equipe']['smc']}")
     print(f"   • BCT: {info['equipe']['bct']}")
     print(f"   • OEA: {info['equipe']['oea']}")
@@ -50,15 +51,23 @@ def renomear_arquivo(caminho_atual, novo_caminho):
 
 def processo_verificacao_visual(lista_pendentes):
     if not lista_pendentes: return
-    print(f"{Cor.CYAN}Verificar {len(lista_pendentes)} livros pendentes?{Cor.RESET}")
+    print(f"{Cor.ORANGE}Verificar {len(lista_pendentes)} livros pendentes?{Cor.RESET}")
     if not utils.pedir_confirmacao("Iniciar UM POR UM? (S/Enter p/ Sim, ESC p/ Pular): "): return
+
+    print("\n")
+    abrir_pdfs = utils.pedir_confirmacao(f"{Cor.YELLOW}Deseja ABRIR os PDFs para acompanhamento? (S/Enter p/ Sim, ESC p/ Modo Rápido): {Cor.RESET}")
 
     for cnt, item in enumerate(lista_pendentes, start=1):
         caminho, data_str, turno = item['path'], item['data'], item['turno']
         nome_atual = os.path.basename(caminho)
-        print(f"\n{Cor.YELLOW}--- ({cnt}/{len(lista_pendentes)}) ---{Cor.RESET}")
-        print(f"{Cor.CYAN}Arquivo: {nome_atual}{Cor.RESET}")
-        utils.abrir_arquivo(caminho)
+        
+        # --- NOVO ESPAÇAMENTO E DESTAQUE VISUAL ---
+        print("\n\n") # Duas quebras de linha para criar uma área de "respiro"
+        print(f"{Cor.bg_ORANGE}{Cor.WHITE}  ▶ LIVRO ({cnt}/{len(lista_pendentes)}) - Arquivo: {nome_atual}  {Cor.RESET}")
+        
+        if abrir_pdfs:
+            utils.abrir_arquivo(caminho)
+            
         print(f"{Cor.GREY}A analisar estrutura e texto...{Cor.RESET}")
         info = utils.analisar_conteudo_lro(caminho)
         exibir_dados_analise(info)
@@ -74,8 +83,13 @@ def processo_verificacao_visual(lista_pendentes):
             else:
                 print(f"{Cor.GREY}   [-] Mantido.{Cor.RESET}")
         else:
-            resp_base = utils.extrair_nome_base(info.get('responsavel', ''))
-            sugestao_str = f" ({resp_base})" if resp_base not in ["---", "???", ""] else ""
+            nome_dic = extrair_nome_relato(info.get('responsavel', ''))
+            
+            if nome_dic != "???":
+                sugestao_str = f" ({nome_dic})"
+            else:
+                resp_base = utils.extrair_nome_base(info.get('responsavel', ''))
+                sugestao_str = f" ({resp_base})" if resp_base not in ["---", "???", ""] else ""
             
             msg = f">> {Cor.RED}ASSINATURA AUSENTE!{Cor.RESET} Renomear p/ FALTA ASS{sugestao_str}? (S/Enter p/ Sim, ESC p/ Não): "
             if utils.pedir_confirmacao(msg):

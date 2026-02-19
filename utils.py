@@ -66,19 +66,18 @@ def normalizar_texto(texto):
     texto = str(texto).upper()
     texto = unicodedata.normalize('NFD', texto).encode('ascii', 'ignore').decode('utf-8')
     
+    # Uso de Regex (\b) para garantir que só troca "IS" se for palavra solta (não no meio de REGIS)
     correcoes = {
-        "JACKSON": "JAKSON",
-        "JACSON": "JAKSON",
-        "GIOVANI": "GIOVANNI",
-        "GEAHL": "GEALH",
-        "IS ": "1S ",
-        "I S ": "1S ",
-        "CP ": "CAP ", 
-        "D. CASTRO": "DE CASTRO",
-        "D CASTRO": "DE CASTRO", 
+        r"\bJACKSON\b": "JAKSON",
+        r"\bJACSON\b": "JAKSON",
+        r"\bGIOVANI\b": "GIOVANNI",
+        r"\bIS\b": "1S",  
+        r"\bI S\b": "1S",
+        r"\bCP\b": "CAP",
+        r"\bD\.?\s*CASTRO\b": "DE CASTRO"
     }
     for errado, certo in correcoes.items():
-        texto = texto.replace(errado, certo)
+        texto = re.sub(errado, certo, texto)
         
     return texto.strip()
 
@@ -108,7 +107,6 @@ def encontrar_legenda_fallback(texto_alvo, dicionario_mapa):
             return dados["legenda"]
     return "???"
 
-
 def verificar_assinatura_estrutural(caminho_pdf):
     if not PYPDF_ENABLED: return False
     try:
@@ -127,25 +125,26 @@ def verificar_assinatura_estrutural(caminho_pdf):
 def extrair_dados_texto(texto_linear, dados):
     match_data = re.search(r"(\d+º)\s*turno.*?do dia\s*(\d+)\s*de\s*([a-zA-Zç]+)\s*de\s*(\d{4})", texto_linear, re.IGNORECASE)
     if match_data:
-        dados["cabecalho"] = f"dia {match_data.group(2)} de {match_data.group(3)} de {match_data.group(1)} turno {match_data.group(4)}"
+        dados["cabecalho"] = f"Dia {match_data.group(2)} de {match_data.group(3)} de {match_data.group(1)} turno {match_data.group(4)}"
     
-    # 1. NOVO: Captura o Bloco Inteiro do RECEBIMENTO (Item 1)
+    # Extração de Blocos
     match_bloco_recebeu = re.search(r"RECEBIMENTO DO SERVI[CÇ]O:(.*?)(?:2\.\s*EQUIPE|EQUIPE DE SERVI[CÇ]O)", texto_linear, re.IGNORECASE)
     if match_bloco_recebeu: 
-        dados["recebeu"] = match_bloco_recebeu.group(1).strip()
+        raw_recebeu = match_bloco_recebeu.group(1).strip()
     else:
-        # Fallback de segurança
         match_recebi = re.search(r"(Recebi-o[\s\S]*?vigor\.?)", texto_linear, re.IGNORECASE)
-        if match_recebi: dados["recebeu"] = match_recebi.group(1).strip()
+        raw_recebeu = match_recebi.group(1).strip() if match_recebi else "---"
 
-    # 2. NOVO: Captura o Bloco Inteiro da PASSAGEM (Item 4)
     match_bloco_passou = re.search(r"PASSAGEM DE SERVI[CÇ]O:(.*?)(?:gov\.br|Documento assinado|Asas que|$)", texto_linear, re.IGNORECASE)
     if match_bloco_passou: 
-        dados["passou"] = match_bloco_passou.group(1).strip()
+        raw_passou = match_bloco_passou.group(1).strip()
     else:
-        # Fallback de segurança
         match_passei = re.search(r"(Passei-o[\s\S]*?vigor\.?)", texto_linear, re.IGNORECASE)
-        if match_passei: dados["passou"] = match_passei.group(1).strip()
+        raw_passou = match_passei.group(1).strip() if match_passei else "---"
+
+    # LIMPEZA ESTÉTICA: Apaga tudo a partir de "ciente" ou "cientificando"
+    dados["recebeu"] = re.sub(r",?\s*(?:ciente|cientificando).*$", "", raw_recebeu, flags=re.IGNORECASE).strip()
+    dados["passou"] = re.sub(r",?\s*(?:ciente|cientificando).*$", "", raw_passou, flags=re.IGNORECASE).strip()
 
     match_resp_gov = re.search(r"validar\.iti\.gov\.br\s+([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ a-z]+?)\s*-", texto_linear, re.IGNORECASE)
     if match_resp_gov: dados["responsavel"] = match_resp_gov.group(1).strip().upper()
@@ -158,13 +157,14 @@ def extrair_dados_texto(texto_linear, dados):
         txt_eq = match_bloco.group(1)
         dados["texto_equipe"] = txt_eq 
         
-        m_smc = re.search(r"(?:^|[;,])\s*(.*?)\s*(?:-|)\s*SMC", txt_eq, re.IGNORECASE)
+        # Regex blindada: [^;,]*? impede que a busca salte por cima de outros militares
+        m_smc = re.search(r"(?:^|[;,])([^;,]*?)\s*(?:-|)\s*SMC", txt_eq, re.IGNORECASE)
         if m_smc: dados["equipe"]["smc"] = m_smc.group(1).strip()
         
-        m_bct = re.search(r"[;,]\s*(.*?)\s*(?:-|)\s*Controlador", txt_eq, re.IGNORECASE)
+        m_bct = re.search(r"(?:^|[;,])([^;,]*?)\s*(?:-|)\s*Controlador", txt_eq, re.IGNORECASE)
         if m_bct: dados["equipe"]["bct"] = m_bct.group(1).strip()
         
-        m_oea = re.search(r"[;,]\s*(.*?)\s*(?:-|)\s*Operador", txt_eq, re.IGNORECASE)
+        m_oea = re.search(r"(?:^|[;,])([^;,]*?)\s*(?:-|)\s*Operador", txt_eq, re.IGNORECASE)
         if m_oea: dados["equipe"]["oea"] = m_oea.group(1).strip()
 
 def analisar_conteudo_lro(caminho_pdf):
@@ -173,7 +173,7 @@ def analisar_conteudo_lro(caminho_pdf):
         "equipe": {"smc": "---", "bct": "---", "oea": "---"},
         "assinatura": verificar_assinatura_estrutural(caminho_pdf),
         "texto_completo": "",
-        "texto_equipe": "" # Campo novo!
+        "texto_equipe": "" 
     }
     if PLUMBER_ENABLED:
         try:
