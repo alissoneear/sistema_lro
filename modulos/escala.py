@@ -25,7 +25,6 @@ def get_sem(ano, mes, dia):
 def verificar_e_propor_correcoes(escala_detalhada, mapa_efetivo, ano, mes):
     inconsistencias = [] 
     correcoes = []       
-    
     dias = sorted(escala_detalhada.keys())
     ignorar = ['---', '???', 'PND', 'ERR']
     
@@ -40,10 +39,8 @@ def verificar_e_propor_correcoes(escala_detalhada, mapa_efetivo, ano, mes):
         # --- REGRA 1: DOBRA DE TURNO ---
         violacao = None
         turno_suspeito = None
-        if l1 not in ignorar and l1 == l2:
-            violacao = (1, 2, l1); turno_suspeito = 2
-        elif l2 not in ignorar and l2 == l3:
-            violacao = (2, 3, l2); turno_suspeito = 3
+        if l1 not in ignorar and l1 == l2: violacao = (1, 2, l1); turno_suspeito = 2
+        elif l2 not in ignorar and l2 == l3: violacao = (2, 3, l2); turno_suspeito = 3
 
         if violacao:
             t_a, t_b, leg = violacao
@@ -51,12 +48,10 @@ def verificar_e_propor_correcoes(escala_detalhada, mapa_efetivo, ano, mes):
             leg_ass = obter_legenda_pelo_nome(dados_dia[turno_suspeito]['assinatura_nome'])
             
             if leg_ass not in ['---', '???'] and leg_ass != leg:
-                # Caso de Erro de Digitação (Assinatura diferente da Equipe)
                 nome_correto = obter_info_militar(leg_ass, mapa_efetivo)
                 inconsistencias.append(f"⚠️ Dia {dia:02d} ({dia_sem}): Militar {nome_mil} ({leg}) em turnos seguidos ({t_a}º/{t_b}º).\n      ↳ 🕵️‍♂️ {Cor.GREEN}SOLUÇÃO:{Cor.RESET} O {t_b}ºT foi assinado por {nome_correto} ({leg_ass}). Erro de digitação.")
                 correcoes.append({'dia': dia, 'turno': turno_suspeito, 'nova_leg': leg_ass})
             else:
-                # Caso de Violação Operacional Real (Assinatura confirma a Equipe)
                 inconsistencias.append(f"⚠️ Dia {dia:02d} ({dia_sem}): Militar {nome_mil} ({leg}) dobrou o turno ({t_a}º e {t_b}º).\n      ↳ ⚖️ {Cor.YELLOW}INFO:{Cor.RESET} Assinaturas confirmam que o militar realmente cumpriu ambos os turnos.")
 
         # --- REGRA 2: FOLGA PÓS-3º TURNO ---
@@ -67,12 +62,10 @@ def verificar_e_propor_correcoes(escala_detalhada, mapa_efetivo, ano, mes):
             
             if l3_ant not in ignorar:
                 turnos_hoje_violados = [t for t in [1, 2, 3] if escala_detalhada[dia][t]['legenda'] == l3_ant]
-                
                 if turnos_hoje_violados:
-                    str_turnos = " e ".join([f"{t}º" for t in turnos_hoje_violados])
                     nome_mil = obter_info_militar(l3_ant, mapa_efetivo)
                     pistas = []
-                    violation_real = True # Assume que é real até provar erro de assinatura
+                    violation_real = True 
 
                     for t_hoje in turnos_hoje_violados:
                         leg_ass_hoje = obter_legenda_pelo_nome(escala_detalhada[dia][t_hoje]['assinatura_nome'])
@@ -83,11 +76,10 @@ def verificar_e_propor_correcoes(escala_detalhada, mapa_efetivo, ano, mes):
                             violation_real = False
 
                     msg_auditoria = ""
-                    if pistas:
-                        msg_auditoria = f"\n      ↳ 🕵️‍♂️ {Cor.GREEN}SOLUÇÃO:{Cor.RESET} " + " ".join(pistas) + " Provável erro de digitação."
-                    elif violation_real:
-                        msg_auditoria = f"\n      ↳ ⚖️ {Cor.YELLOW}INFO:{Cor.RESET} Assinaturas confirmam que {nome_mil} cumpriu o serviço sem a folga regulamentar."
+                    if pistas: msg_auditoria = f"\n      ↳ 🕵️‍♂️ {Cor.GREEN}SOLUÇÃO:{Cor.RESET} " + " ".join(pistas) + " Provável erro de digitação."
+                    elif violation_real: msg_auditoria = f"\n      ↳ ⚖️ {Cor.YELLOW}INFO:{Cor.RESET} Assinaturas confirmam que {nome_mil} cumpriu o serviço sem a folga regulamentar."
 
+                    str_turnos = " e ".join([f"{t}º" for t in turnos_hoje_violados])
                     inconsistencias.append(f"🚨 Dia {dia:02d} ({dia_sem}): Militar {nome_mil} ({l3_ant}) sem folga do dia {dia_ant:02d} ({dia_sem_ant}).{msg_auditoria}")
                     
     return inconsistencias, correcoes
@@ -147,10 +139,8 @@ def executar():
                 data_str = f"{dia_fmt}{mes}{ano_curto}"
                 turnos = utils.calcular_turnos_validos(dia, mes, agora.day, mes_atual, agora.hour)
 
-                dia_dados = {
-                    'smc': '---', 'bct': {1:'---',2:'---',3:'---'}, 'oea': {1:'---',2:'---',3:'---'},
-                    'meta': {1:{'assinatura_nome':'???'}, 2:{'assinatura_nome':'???'}, 3:{'assinatura_nome':'???'}}
-                }
+                dia_dados = {'smc': '---', 'bct': {1:'---',2:'---',3:'---'}, 'oea': {1:'---',2:'---',3:'---'},
+                             'meta': {1:{'assinatura_nome':'???'}, 2:{'assinatura_nome':'???'}, 3:{'assinatura_nome':'???'}}}
 
                 for turno in turnos:
                     arquivos = utils.buscar_arquivos_flexivel(path_mes, data_str, turno)
@@ -162,25 +152,16 @@ def executar():
                             dia_dados['meta'][turno]['assinatura_nome'] = 'PND'
                         continue
 
-                    arquivos_ok = [f for f in pdfs if "OK" in f.upper()]
-                    arquivo_alvo = arquivos_ok[0] if arquivos_ok else pdfs[0]
+                    arquivo_alvo = [f for f in pdfs if "OK" in f.upper()][0] if [f for f in pdfs if "OK" in f.upper()] else pdfs[0]
                     info = utils.analisar_conteudo_lro(arquivo_alvo)
                     if info:
+                        # O utils agora já traz o nome inteligente! Basta converter para legenda.
+                        dia_dados['smc'] = utils.encontrar_legenda(info['equipe']['smc'], mapa_smc)
+                        dia_dados['bct'][turno] = utils.encontrar_legenda(info['equipe']['bct'], mapa_bct)
+                        dia_dados['oea'][turno] = utils.encontrar_legenda(info['equipe']['oea'], mapa_oea)
+                        
                         resp_base = utils.extrair_nome_base(info.get('responsavel', ''))
                         dia_dados['meta'][turno]['assinatura_nome'] = resp_base
-                        
-                        leg_smc = utils.encontrar_legenda(info['equipe']['smc'], mapa_smc)
-                        leg_bct = utils.encontrar_legenda(info['equipe']['bct'], mapa_bct)
-                        leg_oea = utils.encontrar_legenda(info['equipe']['oea'], mapa_oea)
-                        
-                        txt_busca = info.get('texto_equipe', '') or info['texto_completo']
-                        if leg_smc in ['---','???']: leg_smc = utils.encontrar_legenda_fallback(txt_busca, mapa_smc)
-                        if leg_bct in ['---','???']: leg_bct = utils.encontrar_legenda_fallback(txt_busca, mapa_bct)
-                        if leg_oea in ['---','???']: leg_oea = utils.encontrar_legenda_fallback(txt_busca, mapa_oea)
-
-                        if dia_dados['smc'] == '---' and leg_smc not in ['---', '???']: dia_dados['smc'] = leg_smc
-                        elif dia_dados['smc'] == '---': dia_dados['smc'] = leg_smc
-                        dia_dados['bct'][turno] = leg_bct; dia_dados['oea'][turno] = leg_oea
                     else:
                         dia_dados['bct'][turno] = 'ERR'; dia_dados['oea'][turno] = 'ERR'
 
@@ -188,26 +169,17 @@ def executar():
                 for t in [1, 2, 3]:
                     leg = dia_dados['bct'][t] if opcao_escala == '2' else dia_dados['oea'][t] if opcao_escala == '3' else '---'
                     escala_detalhada[dia][t] = {'legenda': leg, 'assinatura_nome': dia_dados['meta'][t]['assinatura_nome']}
-                    if opcao_escala == '1' and t==1: escala_detalhada[dia]['smc'] = dia_dados['smc']
+                    if opcao_escala == '1': escala_detalhada[dia]['smc'] = dia_dados['smc']
 
-            # --- 2. AUDITORIA INICIAL ---
+            # --- AUDITORIA E EXIBIÇÃO ---
             if opcao_escala in ['2', '3']:
                 inconsistencias, correcoes = verificar_e_propor_correcoes(escala_detalhada, mapa_ativo, ano_longo, mes)
-                
                 if inconsistencias:
                     print(f"\n{Cor.bg_BLUE}{Cor.WHITE} 🔍 ANÁLISE PRÉVIA DE CONSISTÊNCIA {Cor.RESET}")
                     for inc in inconsistencias: print(f"{Cor.RED}{inc}{Cor.RESET}")
-                    print("-" * 60)
-                    
-                    if correcoes:
-                        if utils.pedir_confirmacao(f"\n{Cor.YELLOW}>> Encontrei correções de digitação. Aplicar na tabela? (S/Enter p/ Sim, ESC p/ Não): {Cor.RESET}"):
-                            for c in correcoes:
-                                d, t, nl = c['dia'], c['turno'], c['nova_leg']
-                                escala_detalhada[d][t]['legenda'] = nl
-                            print(f"{Cor.GREEN}   [V] Correções de digitação aplicadas.{Cor.RESET}")
-                            time.sleep(1)
-            
-            # --- 3. IMPRIMIR TABELA ---
+                    if correcoes and utils.pedir_confirmacao(f"\n{Cor.YELLOW}>> Aplicar correções de digitação na tabela? (S/Enter p/ Sim, ESC p/ Não): {Cor.RESET}"):
+                        for c in correcoes: escala_detalhada[c['dia']][c['turno']]['legenda'] = c['nova_leg']
+
             print("\n")
             if opcao_escala == '1':
                 print(f"{Cor.bg_BLUE}{Cor.WHITE} DIA | SEM |  SMC  {Cor.RESET}"); tracos = 19
@@ -217,24 +189,19 @@ def executar():
             for dia in range(1, qtd_dias + 1):
                 dt = datetime.date(int(ano_longo), int(mes), dia)
                 sigla_sem = Config.MAPA_SEMANA[dt.weekday()]
-                dia_fmt = f"{dia:02d}"
                 if opcao_escala == '1':
-                    print(f" {dia_fmt}  | {sigla_sem} |  {escala_detalhada[dia]['smc']:^3}  ")
+                    print(f" {dia:02d}  | {sigla_sem} |  {escala_detalhada[dia]['smc']:^3}  ")
                 else:
                     l1, l2, l3 = escala_detalhada[dia][1]['legenda'], escala_detalhada[dia][2]['legenda'], escala_detalhada[dia][3]['legenda']
-                    print(f" {dia_fmt}  | {sigla_sem} |   {l1:^4}   |   {l2:^4}   |   {l3:^4}   ")
+                    print(f" {dia:02d}  | {sigla_sem} |   {l1:^4}   |   {l2:^4}   |   {l3:^4}   ")
 
             print("-" * tracos)
-
-            # --- 4. AUDITORIA FINAL (RESUMO) ---
             if opcao_escala in ['2', '3']:
                 inc_final, _ = verificar_e_propor_correcoes(escala_detalhada, mapa_ativo, ano_longo, mes)
                 print("\n" + f"{Cor.bg_ORANGE}{Cor.WHITE} RESUMO DA AUDITORIA OPERACIONAL {Cor.RESET}".center(tracos + 10))
                 if inc_final:
                     for inc in inc_final: print(f"{Cor.RED}{inc}{Cor.RESET}")
-                else:
-                    print(f"{Cor.GREEN}✅ Escala 100% consistente com as regras operacionais!{Cor.RESET}")
+                else: print(f"{Cor.GREEN}✅ Escala consistente com as normas de folga.{Cor.RESET}")
                 print("-" * tracos)
 
-            if not utils.pedir_confirmacao(f"\n{Cor.YELLOW}Verificar outra especialidade? (S/Enter p/ Sim, ESC p/ Voltar): {Cor.RESET}"):
-                return
+            if not utils.pedir_confirmacao(f"\n{Cor.YELLOW}Verificar outra especialidade? (S/Enter p/ Sim, ESC p/ Voltar): {Cor.RESET}"): return

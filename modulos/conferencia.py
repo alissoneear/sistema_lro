@@ -47,12 +47,10 @@ def executar():
             dia_fmt = f"{dia:02d}"
             data_str = f"{dia_fmt}{mes}{ano_curto}"
             
-            # Percorre todos os turnos (1, 2, 3)
             for turno in [1, 2, 3]:
                 arquivos = utils.buscar_arquivos_flexivel(path_mes, data_str, turno)
                 if not arquivos: continue
                 
-                # Prioriza ler o PDF (OK ou Pendente)
                 pdfs = [f for f in arquivos if f.lower().endswith('.pdf')]
                 if not pdfs: continue
                 
@@ -60,8 +58,9 @@ def executar():
                 ok_files = [f for f in pdfs if "OK" in f.upper()]
                 arquivo_alvo = ok_files[0] if ok_files else pdfs[0]
                 
-                # Estética igual ao modo rápido do verificador
-                print(f"\n{Cor.bg_ORANGE}{Cor.WHITE}  ▶ CONFERÊNCIA - Arquivo: {os.path.basename(arquivo_alvo)}  {Cor.RESET}")
+                # --- ESPAÇAMENTO ADICIONADO AQUI ---
+                print("\n\n") 
+                print(f"{Cor.bg_ORANGE}{Cor.WHITE}  ▶ CONFERÊNCIA - Arquivo: {os.path.basename(arquivo_alvo)}  {Cor.RESET}")
                 
                 info = utils.analisar_conteudo_lro(arquivo_alvo)
                 verificador.exibir_dados_analise(info)

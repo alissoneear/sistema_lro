@@ -122,50 +122,56 @@ def verificar_assinatura_estrutural(caminho_pdf):
     except Exception: pass
     return False
 
+def busca_inteligente_equipe(texto_bloco, mapa_efetivo):
+    """Varre um bloco de texto procurando militares do dicionário de forma robusta."""
+    texto_norm = normalizar_texto(texto_bloco)
+    
+    # Criar lista de nomes base (ex: 'GIOVANNI') ordenada pelo tamanho (maiores primeiro)
+    nomes_base = [(extrair_nome_base(ng), ng) for ng in mapa_efetivo.keys()]
+    nomes_base.sort(key=lambda x: len(x[0]), reverse=True)
+    
+    for nome_base, nome_completo in nomes_base:
+        if re.search(rf'\b{re.escape(nome_base)}\b', texto_norm):
+            # Retorna apenas o Posto e Nome (ex: '1S GIOVANNI')
+            partes = nome_completo.split('-')
+            return partes[1].strip() if len(partes) > 1 else nome_completo
+    return "---"
+
 def extrair_dados_texto(texto_linear, dados):
+    # Cabeçalho
     match_data = re.search(r"(\d+º)\s*turno.*?do dia\s*(\d+)\s*de\s*([a-zA-Zç]+)\s*de\s*(\d{4})", texto_linear, re.IGNORECASE)
     if match_data:
         dados["cabecalho"] = f"Dia {match_data.group(2)} de {match_data.group(3)} de {match_data.group(1)} turno {match_data.group(4)}"
     
-    # Extração de Blocos
+    # Recebeu/Passou
     match_bloco_recebeu = re.search(r"RECEBIMENTO DO SERVI[CÇ]O:(.*?)(?:2\.\s*EQUIPE|EQUIPE DE SERVI[CÇ]O)", texto_linear, re.IGNORECASE)
-    if match_bloco_recebeu: 
-        raw_recebeu = match_bloco_recebeu.group(1).strip()
-    else:
-        match_recebi = re.search(r"(Recebi-o[\s\S]*?vigor\.?)", texto_linear, re.IGNORECASE)
-        raw_recebeu = match_recebi.group(1).strip() if match_recebi else "---"
-
+    raw_recebeu = match_bloco_recebeu.group(1).strip() if match_bloco_recebeu else "---"
+    
     match_bloco_passou = re.search(r"PASSAGEM DE SERVI[CÇ]O:(.*?)(?:gov\.br|Documento assinado|Asas que|$)", texto_linear, re.IGNORECASE)
-    if match_bloco_passou: 
-        raw_passou = match_bloco_passou.group(1).strip()
-    else:
-        match_passei = re.search(r"(Passei-o[\s\S]*?vigor\.?)", texto_linear, re.IGNORECASE)
-        raw_passou = match_passei.group(1).strip() if match_passei else "---"
+    raw_passou = match_bloco_passou.group(1).strip() if match_bloco_passou else "---"
 
-    # LIMPEZA ESTÉTICA: Apaga tudo a partir de "ciente" ou "cientificando"
     dados["recebeu"] = re.sub(r",?\s*(?:ciente|cientificando).*$", "", raw_recebeu, flags=re.IGNORECASE).strip()
     dados["passou"] = re.sub(r",?\s*(?:ciente|cientificando).*$", "", raw_passou, flags=re.IGNORECASE).strip()
 
+    # Responsável pela Assinatura
     match_resp_gov = re.search(r"validar\.iti\.gov\.br\s+([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ a-z]+?)\s*-", texto_linear, re.IGNORECASE)
     if match_resp_gov: dados["responsavel"] = match_resp_gov.group(1).strip().upper()
     else:
         match_resp_txt = re.search(r"ordens em vigor\.\s*([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ a-z]+?)\s*-", texto_linear, re.IGNORECASE)
         if match_resp_txt: dados["responsavel"] = match_resp_txt.group(1).strip().upper()
 
-    match_bloco = re.search(r"EQUIPE DE SERVI[CÇ]O:(.*?)3\.", texto_linear, re.IGNORECASE)
-    if match_bloco:
-        txt_eq = match_bloco.group(1)
+    # Equipe (Agora totalmente automatizada e inteligente)
+    match_bloco_eq = re.search(r"EQUIPE DE SERVI[CÇ]O:(.*?)3\.", texto_linear, re.IGNORECASE)
+    if match_bloco_eq:
+        txt_eq = match_bloco_eq.group(1)
         dados["texto_equipe"] = txt_eq 
         
-        # Regex blindada: [^;,]*? impede que a busca salte por cima de outros militares
-        m_smc = re.search(r"(?:^|[;,])([^;,]*?)\s*(?:-|)\s*SMC", txt_eq, re.IGNORECASE)
-        if m_smc: dados["equipe"]["smc"] = m_smc.group(1).strip()
+        from config import DadosEfetivo
+        m_smc, m_bct, m_oea = DadosEfetivo.mapear_efetivo()
         
-        m_bct = re.search(r"(?:^|[;,])([^;,]*?)\s*(?:-|)\s*Controlador", txt_eq, re.IGNORECASE)
-        if m_bct: dados["equipe"]["bct"] = m_bct.group(1).strip()
-        
-        m_oea = re.search(r"(?:^|[;,])([^;,]*?)\s*(?:-|)\s*Operador", txt_eq, re.IGNORECASE)
-        if m_oea: dados["equipe"]["oea"] = m_oea.group(1).strip()
+        dados["equipe"]["smc"] = busca_inteligente_equipe(txt_eq, m_smc)
+        dados["equipe"]["bct"] = busca_inteligente_equipe(txt_eq, m_bct)
+        dados["equipe"]["oea"] = busca_inteligente_equipe(txt_eq, m_oea)
 
 def analisar_conteudo_lro(caminho_pdf):
     dados = {
