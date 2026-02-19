@@ -2,8 +2,8 @@ import os
 import sys
 import glob
 import re
+import unicodedata # Nova biblioteca nativa para lidar com acentos!
 
-# Importa as configurações do seu outro arquivo!
 from config import Config, Cor
 
 try:
@@ -11,14 +11,12 @@ try:
     PLUMBER_ENABLED = True
 except ImportError:
     PLUMBER_ENABLED = False
-    print("AVISO: 'pdfplumber' não instalado.")
 
 try:
     from pypdf import PdfReader
     PYPDF_ENABLED = True
 except ImportError:
     PYPDF_ENABLED = False
-    print("AVISO: 'pypdf' não instalado.")
 
 try:
     import msvcrt
@@ -43,7 +41,7 @@ def pedir_confirmacao(mensagem):
             elif tecla == b'\x1b':
                 print("ESC")
                 return False
-            elif tecla == b'\x03':  # O byte gerado pelo atalho CTRL + C
+            elif tecla == b'\x03':  # Trata o CTRL+C corretamente!
                 print("^C")
                 raise KeyboardInterrupt
     else:
@@ -62,14 +60,65 @@ def abrir_arquivo(caminho):
     except Exception as e:
         print(f"{Cor.RED}[Erro ao abrir]: {e}{Cor.RESET}")
 
+# ==========================================
+#     NOVO SISTEMA DE NORMALIZAÇÃO
+# ==========================================
+def normalizar_texto(texto):
+    """Remove acentos, converte para maiúsculo e padroniza erros."""
+    if not texto: return "---"
+    texto = str(texto).upper()
+    
+    # 1. Remove os acentos matematicamente
+    texto = unicodedata.normalize('NFD', texto).encode('ascii', 'ignore').decode('utf-8')
+    
+    # 2. Dicionário de Correções de Digitação (Pode adicionar os que quiser!)
+    correcoes = {
+        "JACKSON": "JAKSON",
+        "JACSON": "JAKSON",
+        "GIOVANI": "GIOVANNI"
+    }
+    for errado, certo in correcoes.items():
+        texto = texto.replace(errado, certo)
+        
+    return texto.strip()
+
+def extrair_nome_base(nome_guerra):
+    """Remove a patente do nome para buscar só a essência. Ex: '1S TERBECK' -> 'TERBECK'"""
+    nome_norm = normalizar_texto(nome_guerra)
+    partes = nome_norm.split()
+    patentes = ['1S', '2S', '3S', 'SO', 'TEN', '1T', '2T', 'CAP', 'MAJ', 'CEL', 'SGT']
+    
+    # Se a primeira palavra for uma patente, junta o resto do nome
+    if len(partes) > 1 and partes[0] in patentes:
+        return " ".join(partes[1:])
+    return nome_norm
+
 def encontrar_legenda(nome_extraido, dicionario_mapa):
-    nome_ext = nome_extraido.upper().strip()
+    """Busca Padrão"""
+    nome_ext = normalizar_texto(nome_extraido)
     if nome_ext in ["---", ""]: return "---"
+    
     for nome_guerra, dados in dicionario_mapa.items():
-        if nome_guerra in nome_ext or nome_ext in nome_guerra:
+        nome_base = extrair_nome_base(nome_guerra)
+        if nome_base in nome_ext or nome_ext in nome_base:
             return dados["legenda"]
     return "???"
 
+def encontrar_legenda_fallback(texto_completo, dicionario_mapa):
+    """Busca Agressiva: varre o documento inteiro procurando a essência do nome."""
+    texto_norm = normalizar_texto(texto_completo)
+    
+    for nome_guerra, dados in dicionario_mapa.items():
+        nome_base = extrair_nome_base(nome_guerra)
+        # Se o nome base ("FABIO CESAR", "JAKSON") existir em qualquer lugar do PDF
+        if nome_base in texto_norm:
+            return dados["legenda"]
+    return "???"
+
+
+# ==========================================
+#     PROCESSAMENTO DE PDF E TEXTO
+# ==========================================
 def verificar_assinatura_estrutural(caminho_pdf):
     if not PYPDF_ENABLED: return False
     try:
@@ -102,7 +151,7 @@ def extrair_dados_texto(texto_linear, dados):
         match_resp_txt = re.search(r"ordens em vigor\.\s*([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ a-z]+?)\s*-", texto_linear, re.IGNORECASE)
         if match_resp_txt: dados["responsavel"] = match_resp_txt.group(1).strip().upper()
 
-    match_bloco = re.search(r"EQUIPE DE SERVIÇO:(.*?)3\.", texto_linear, re.IGNORECASE)
+    match_bloco = re.search(r"EQUIPE DE SERVI[CÇ]O:(.*?)3\.", texto_linear, re.IGNORECASE)
     if match_bloco:
         txt_eq = match_bloco.group(1)
         m_smc = re.search(r"(?:^|;)\s*([^;-]+?)\s*(?:-|)\s*SMC", txt_eq, re.IGNORECASE)
@@ -116,13 +165,17 @@ def analisar_conteudo_lro(caminho_pdf):
     dados = {
         "cabecalho": "---", "responsavel": "---", "recebeu": "---", "passou": "---", 
         "equipe": {"smc": "---", "bct": "---", "oea": "---"},
-        "assinatura": verificar_assinatura_estrutural(caminho_pdf)
+        "assinatura": verificar_assinatura_estrutural(caminho_pdf),
+        "texto_completo": "" # Salva o texto completo para o Fallback Agressivo
     }
     if PLUMBER_ENABLED:
         try:
             with pdfplumber.open(caminho_pdf) as pdf:
                 texto_completo = "".join([pagina.extract_text() or "" for pagina in pdf.pages])
                 texto_linear = texto_completo.replace('\n', ' ')
+                
+                # Guarda o texto para emergências
+                dados["texto_completo"] = texto_linear
                 
                 if not dados["assinatura"] and "validar.iti.gov.br" in texto_linear.lower():
                     dados["assinatura"] = True

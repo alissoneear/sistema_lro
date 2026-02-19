@@ -99,14 +99,24 @@ def executar():
 
                     info = utils.analisar_conteudo_lro(arquivo_alvo)
                     if info:
+                        # 1. Tenta a Busca Normal (Expressões Regulares)
                         leg_smc = utils.encontrar_legenda(info['equipe']['smc'], mapa_smc)
+                        leg_bct = utils.encontrar_legenda(info['equipe']['bct'], mapa_bct)
+                        leg_oea = utils.encontrar_legenda(info['equipe']['oea'], mapa_oea)
+                        
+                        # 2. SE FALHAR, Ativa a Busca Agressiva (Fallback) no documento todo!
+                        if leg_smc in ['---', '???']: leg_smc = utils.encontrar_legenda_fallback(info['texto_completo'], mapa_smc)
+                        if leg_bct in ['---', '???']: leg_bct = utils.encontrar_legenda_fallback(info['texto_completo'], mapa_bct)
+                        if leg_oea in ['---', '???']: leg_oea = utils.encontrar_legenda_fallback(info['texto_completo'], mapa_oea)
+
+                        # Fixa o SMC no primeiro turno que encontrar válido
                         if dia_dados['smc'] == '---' and leg_smc not in ['---', '???']:
                             dia_dados['smc'] = leg_smc
                         elif dia_dados['smc'] == '---':
                             dia_dados['smc'] = leg_smc
                             
-                        dia_dados['bct'][turno] = utils.encontrar_legenda(info['equipe']['bct'], mapa_bct)
-                        dia_dados['oea'][turno] = utils.encontrar_legenda(info['equipe']['oea'], mapa_oea)
+                        dia_dados['bct'][turno] = leg_bct
+                        dia_dados['oea'][turno] = leg_oea
                     else:
                         dia_dados['bct'][turno] = 'ERR'
                         dia_dados['oea'][turno] = 'ERR'
