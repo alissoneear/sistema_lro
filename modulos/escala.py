@@ -331,7 +331,7 @@ def executar():
         ano_curto = inp_ano if inp_ano else ano_atual_curto
         ano_longo = "20" + ano_curto
 
-        mapa_smc, mapa_bct, mapa_oea = DadosEfetivo.mapear_efetivo()
+        mapa_smc, mapa_bct, mapa_oea = DadosEfetivo.mapear_efetivo(mes, ano_curto)
 
         while True:
             utils.limpar_tela()
@@ -383,7 +383,7 @@ def executar():
                         continue
 
                     arquivo_alvo = [f for f in pdfs if "OK" in f.upper()][0] if [f for f in pdfs if "OK" in f.upper()] else pdfs[0]
-                    info = utils.analisar_conteudo_lro(arquivo_alvo)
+                    info = utils.analisar_conteudo_lro(arquivo_alvo, mes, ano_curto)
                     if info:
                         dia_dados['smc'] = utils.encontrar_legenda(info['equipe']['smc'], mapa_smc)
                         dia_dados['bct'][turno] = utils.encontrar_legenda(info['equipe']['bct'], mapa_bct)
