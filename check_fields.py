@@ -145,7 +145,7 @@ def configurar_template_fevereiro(arquivo_entrada, arquivo_saida):
 
 if __name__ == "__main__":
     # Caminho do seu template
-    template = "template.pdf"
+    template = "bct_2026_fev_temp.pdf"
     saida = "escala_preenchida_teste.pdf"
     verificar_campos_formulario(template)
     #configurar_template_fevereiro(template, "template_fevereiro_final.pdf")

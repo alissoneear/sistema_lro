@@ -253,6 +253,9 @@ def gerar_pdf_escala(escala_detalhada, mapa_ativo, opcao_escala, mes, ano_longo)
     horas_militares = {}
     
     for dia, turnos_dia in escala_detalhada.items():
+        # NOVO: Preenche o dia da semana na variável que o PDF espera (ex: d1_sem = 'SEG')
+        dados_pdf[f"d{dia}_sem"] = get_sem(ano_longo, mes, dia)
+
         for t in [1, 2, 3]:
             leg = turnos_dia[t]['legenda']
             if leg not in ['---', 'PND', 'ERR', '???']:
@@ -261,6 +264,13 @@ def gerar_pdf_escala(escala_detalhada, mapa_ativo, opcao_escala, mes, ano_longo)
             else:
                 dados_pdf[f"d{dia}_t{t}"] = ""
                 
+    # NOVO: Se o mês tiver menos de 31 dias, limpa os campos excedentes do PDF.
+    # Assim, o mesmo template com 31 linhas serve para Fevereiro (28 dias) e meses de 30 dias.
+    for dia_extra in range(len(escala_detalhada) + 1, 32):
+        dados_pdf[f"d{dia_extra}_sem"] = ""
+        for t in [1, 2, 3]:
+            dados_pdf[f"d{dia_extra}_t{t}"] = ""
+
     # Formatação com zfill(2) para garantir sempre 2 dígitos
     dados_pdf["ef_escala"] = str(len(horas_militares)).zfill(2)
     
