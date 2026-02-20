@@ -3,9 +3,14 @@ import time
 import datetime
 import calendar
 import re
+import logging
+
+from pypdf import PdfReader, PdfWriter
 
 from config import Config, Cor, DadosEfetivo
 import utils
+
+logging.getLogger("pypdf").setLevel(logging.ERROR)
 
 def obter_info_militar(legenda, mapa_efetivo):
     for nome_completo, dados in mapa_efetivo.items():
@@ -84,6 +89,95 @@ def verificar_e_propor_correcoes(escala_detalhada, mapa_efetivo, ano, mes):
                     
     return inconsistencias, correcoes
 
+
+def gerar_pdf_escala(escala_detalhada, mapa_ativo, opcao_escala, mes, ano_longo):
+    """
+    Busca o template, calcula horas com arredondamento e salva em uma pasta de saídas dedicada.
+    """
+    especialidade = "bct" if opcao_escala == '2' else "oea"
+    
+    MESES = {
+        "01": ("jan", "JANEIRO"), "02": ("fev", "FEVEREIRO"), "03": ("mar", "MARÇO"),
+        "04": ("abr", "ABRIL"), "05": ("mai", "MAIO"), "06": ("jun", "JUNHO"),
+        "07": ("jul", "JULHO"), "08": ("ago", "AGOSTO"), "09": ("set", "SETEMBRO"),
+        "10": ("out", "OUTUBRO"), "11": ("nov", "NOVEMBRO"), "12": ("dez", "DEZEMBRO")
+    }
+    mes_abrev, mes_longo = MESES.get(mes, ("xxx", "XXX"))
+    
+    # Caminho do Template
+    caminho_template = os.path.join(
+        "templates", especialidade, ano_longo, mes_abrev, 
+        f"{especialidade}_{ano_longo}_{mes_abrev}_temp.pdf"
+    )
+    
+    # Nova Pasta de Saída Dedicada
+    pasta_saida = os.path.join("SAIDAS_PDF", especialidade, ano_longo, mes_abrev)
+    if not os.path.exists(pasta_saida):
+        os.makedirs(pasta_saida) # Cria a árvore de pastas automaticamente
+    
+    if not os.path.exists(caminho_template):
+        print(f"{Cor.RED}[!] Operação cancelada: Template não encontrado em: {caminho_template}{Cor.RESET}")
+        return
+        
+    dados_pdf = {}
+    dados_pdf["mes_ano"] = f"CUMPRIDA {mes_longo}/{ano_longo}"
+    dados_pdf["ef_total"] = str(len(mapa_ativo))
+    
+    minutos_por_turno = {1: 435, 2: 435, 3: 615}
+    horas_militares = {}
+    
+    for dia, turnos_dia in escala_detalhada.items():
+        for t in [1, 2, 3]:
+            leg = turnos_dia[t]['legenda']
+            if leg not in ['---', 'PND', 'ERR', '???']:
+                dados_pdf[f"d{dia}_t{t}"] = leg
+                horas_militares[leg] = horas_militares.get(leg, 0) + minutos_por_turno[t]
+            else:
+                dados_pdf[f"d{dia}_t{t}"] = ""
+                
+    dados_pdf["ef_escala"] = str(len(horas_militares))
+    
+    campos_horas = [f"horas_{chr(i)}" for i in range(97, 112)] 
+    idx = 0
+    
+    for leg in sorted(horas_militares.keys()):
+        if idx >= len(campos_horas): break
+        
+        m_totais = horas_militares[leg]
+        h_inteiras = m_totais // 60
+        m_restantes = m_totais % 60
+        
+        # Arredondamento: >= 30min (cima), < 30min (baixo)
+        h_finais = h_inteiras + 1 if m_restantes >= 30 else h_inteiras
+        
+        dados_pdf[campos_horas[idx]] = f"{leg} - {h_finais}h"
+        idx += 1
+        
+    while idx < len(campos_horas):
+        dados_pdf[campos_horas[idx]] = ""
+        idx += 1
+        
+    print(f"\n{Cor.GREY}Preenchendo documento oficial...{Cor.RESET}")
+    reader = PdfReader(caminho_template)
+    writer = PdfWriter()
+    writer.append(reader)
+    writer.update_page_form_field_values(writer.pages[0], dados_pdf)
+    
+    nome_saida = f"ESCALA_CUMPRIDA_{especialidade.upper()}_{mes_abrev.upper()}_{ano_longo}.pdf"
+    caminho_saida = os.path.join(pasta_saida, nome_saida)
+    
+    try:
+        with open(caminho_saida, "wb") as f:
+            writer.write(f)
+        print(f"{Cor.GREEN}✅ PDF gerado com sucesso!{Cor.RESET}")
+        print(f"{Cor.CYAN}Salvo em: {caminho_saida}{Cor.RESET}")
+        
+        if utils.pedir_confirmacao(f"\n{Cor.YELLOW}>> Deseja ABRIR o PDF gerado agora? (S/Enter p/ Sim, ESC p/ Não): {Cor.RESET}"):
+            utils.abrir_arquivo(caminho_saida)
+    except Exception as e:
+        print(f"{Cor.RED}[!] Erro ao gravar o arquivo PDF: {e}{Cor.RESET}")
+
+
 def executar():
     if os.name == 'nt' and not os.path.exists(Config.CAMINHO_RAIZ):
         input(f"{Cor.RED}[ERRO CRÍTICO] Caminho {Config.CAMINHO_RAIZ} não encontrado.{Cor.RESET}")
@@ -102,7 +196,7 @@ def executar():
         ano_curto = inp_ano if inp_ano else ano_atual_curto
         ano_longo = "20" + ano_curto
 
-        mapa_smc, mapa_bct, mapa_oea = DadosEfetivo.mapear_efetivo(mes, ano_curto)
+        mapa_smc, mapa_bct, mapa_oea = DadosEfetivo.mapear_efetivo()
 
         while True:
             utils.limpar_tela()
@@ -153,9 +247,8 @@ def executar():
                         continue
 
                     arquivo_alvo = [f for f in pdfs if "OK" in f.upper()][0] if [f for f in pdfs if "OK" in f.upper()] else pdfs[0]
-                    info = utils.analisar_conteudo_lro(arquivo_alvo, mes, ano_curto)
+                    info = utils.analisar_conteudo_lro(arquivo_alvo)
                     if info:
-                        # O utils agora já traz o nome inteligente! Basta converter para legenda.
                         dia_dados['smc'] = utils.encontrar_legenda(info['equipe']['smc'], mapa_smc)
                         dia_dados['bct'][turno] = utils.encontrar_legenda(info['equipe']['bct'], mapa_bct)
                         dia_dados['oea'][turno] = utils.encontrar_legenda(info['equipe']['oea'], mapa_oea)
@@ -170,15 +263,6 @@ def executar():
                     leg = dia_dados['bct'][t] if opcao_escala == '2' else dia_dados['oea'][t] if opcao_escala == '3' else '---'
                     escala_detalhada[dia][t] = {'legenda': leg, 'assinatura_nome': dia_dados['meta'][t]['assinatura_nome']}
                     if opcao_escala == '1': escala_detalhada[dia]['smc'] = dia_dados['smc']
-
-            # --- AUDITORIA E EXIBIÇÃO ---
-            if opcao_escala in ['2', '3']:
-                inconsistencias, correcoes = verificar_e_propor_correcoes(escala_detalhada, mapa_ativo, ano_longo, mes)
-                if inconsistencias:
-                    print(f"\n{Cor.bg_BLUE}{Cor.WHITE} 🔍 ANÁLISE PRÉVIA DE CONSISTÊNCIA {Cor.RESET}")
-                    for inc in inconsistencias: print(f"{Cor.RED}{inc}{Cor.RESET}")
-                    if correcoes and utils.pedir_confirmacao(f"\n{Cor.YELLOW}>> Aplicar correções de digitação na tabela? (S/Enter p/ Sim, ESC p/ Não): {Cor.RESET}"):
-                        for c in correcoes: escala_detalhada[c['dia']][c['turno']]['legenda'] = c['nova_leg']
 
             print("\n")
             if opcao_escala == '1':
@@ -203,5 +287,8 @@ def executar():
                     for inc in inc_final: print(f"{Cor.RED}{inc}{Cor.RESET}")
                 else: print(f"{Cor.GREEN}✅ Escala consistente com as normas de folga.{Cor.RESET}")
                 print("-" * tracos)
+                
+                if utils.pedir_confirmacao(f"\n{Cor.CYAN}>> Deseja GERAR O PDF OFICIAL desta Escala Cumprida? (S/Enter p/ Sim, ESC p/ Pular): {Cor.RESET}"):
+                    gerar_pdf_escala(escala_detalhada, mapa_ativo, opcao_escala, mes, ano_longo)
 
             if not utils.pedir_confirmacao(f"\n{Cor.YELLOW}Verificar outra especialidade? (S/Enter p/ Sim, ESC p/ Voltar): {Cor.RESET}"): return
