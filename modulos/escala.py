@@ -89,7 +89,23 @@ def realizar_auditoria_manual(escala_detalhada, mes, ano_curto, path_mes, opcao_
         return False
         
     validas = [dados['legenda'] for dados in mapa_ativo.values()]
-    validas_str = ", ".join(validas)
+    
+    # CRIAÇÃO DO MENU VISUAL DE LEGENDAS (Cheat Sheet)
+    itens_ordenados = sorted(mapa_ativo.items(), key=lambda x: x[1]['legenda'])
+    linhas_menu = []
+    linha_atual = []
+    
+    for nome_guerra, dados in itens_ordenados:
+        linha_atual.append(f"[{dados['legenda']}] {nome_guerra}")
+        if len(linha_atual) == 4:
+            linhas_menu.append("  ".join(f"{item:<22}" for item in linha_atual))
+            linha_atual = []
+            
+    if linha_atual:
+        linhas_menu.append("  ".join(f"{item:<22}" for item in linha_atual))
+        
+    mapa_visual = "\n".join(linhas_menu)
+    
     modificado = False
     
     for dia, t, leg_atual, motivos in pendentes:
@@ -119,7 +135,12 @@ def realizar_auditoria_manual(escala_detalhada, mes, ano_curto, path_mes, opcao_
         else:
             print(f"{Cor.RED}[!] Nenhum PDF encontrado para este turno.{Cor.RESET}")
             
-        nova_leg = input(f"Digite a legenda correta ({validas_str}) ou Enter para manter [{leg_atual}]: ").strip().upper()
+        # 👇 AQUI EXIBIMOS O MAPA ANTES DE PEDIR O INPUT 👇
+        print(f"\n{Cor.CYAN}--- MAPA DE LEGENDAS DO MÊS ---{Cor.RESET}")
+        print(mapa_visual)
+        print(f"{Cor.CYAN}-------------------------------{Cor.RESET}")
+        
+        nova_leg = input(f"Digite a legenda correspondente ou Enter p/ manter [{leg_atual}]: ").strip().upper()
         
         if nova_leg:
             if nova_leg in validas:
