@@ -51,7 +51,7 @@ def imprimir_tabela(escala_detalhada, qtd_dias, opcao_escala, ano_longo, mes):
     print("-" * tracos)
     return tracos
 
-def realizar_auditoria_manual(escala_detalhada, mes, ano_curto, path_mes, opcao_escala, mapa_ativo, alertas_suspeitos=None):
+def realizar_auditoria_manual(escala_detalhada, mes, ano_curto, path_mes, opcao_escala, mapa_ativo, alertas_suspeitos=None, caminho_cache=None):
     """Procura falhas na extração OU alertas da auditoria e abre o PDF exibindo os motivos."""
     if alertas_suspeitos is None: alertas_suspeitos = {}
     pendentes = []
@@ -150,6 +150,13 @@ def realizar_auditoria_manual(escala_detalhada, mes, ano_curto, path_mes, opcao_
                     escala_detalhada[dia][t]['legenda'] = nova_leg
                 modificado = True
                 print(f"{Cor.GREEN}✅ Legenda atualizada para: {nova_leg}{Cor.RESET}")
+
+                # SALVAMENTO AUTOMÁTICO NO CACHE
+                if caminho_cache:
+                    import json
+                    try:
+                        with open(caminho_cache, 'w', encoding='utf-8') as f: json.dump(escala_detalhada, f, indent=4)
+                    except: pass
             else:
                 print(f"{Cor.RED}⚠️ Legenda '{nova_leg}' inválida. A manter '{leg_atual}'.{Cor.RESET}")
         else:
@@ -390,6 +397,30 @@ def executar():
             except: break
             if mes == mes_atual and ano_curto == ano_atual_curto: qtd_dias = agora.day
 
+            # DETEÇÃO DO CACHE E PERGUNTA AO USUÁRIO
+            import json
+            especialidade_nome = 'smc' if opcao_escala == '1' else 'bct' if opcao_escala == '2' else 'oea'
+            caminho_cache = os.path.join(path_mes, f".cache_escala_{especialidade_nome}.json")
+            cache_dados = {}
+            
+            if os.path.exists(caminho_cache):
+                utils.limpar_tela()
+                print(f"{Cor.ORANGE}=== SISTEMA LRO - Escala Cumprida ({mes}/{ano_curto}) ==={Cor.RESET}")
+                print(f"\n{Cor.YELLOW}💾 PROGRESSO SALVO DETETADO!{Cor.RESET}")
+                print(f"{Cor.GREY}Encontramos auditorias manuais feitas anteriormente para a escala de {especialidade_nome.upper()}.{Cor.RESET}\n")
+                
+                if utils.pedir_confirmacao(f"{Cor.CYAN}>> Deseja RETOMAR de onde parou? (S/Enter p/ Sim, ESC p/ Reiniciar do zero): {Cor.RESET}"):
+                    try:
+                        with open(caminho_cache, 'r', encoding='utf-8') as f:
+                            cache_dados = json.load(f)
+                        print(f"{Cor.GREEN}✅ Progresso carregado com sucesso!{Cor.RESET}")
+                        time.sleep(1)
+                    except: pass
+                else:
+                    os.remove(caminho_cache)
+                    print(f"{Cor.GREEN}Cache apagado. Iniciando do zero!{Cor.RESET}")
+                    time.sleep(1)
+
             print(f"\n{Cor.GREY}A processar dados e auditar inconsistências... Aguarde.{Cor.RESET}\n")
 
             escala_detalhada = {}
@@ -419,9 +450,28 @@ def executar():
                     passo_atual += 1
                     atualizar_barra(passo_atual, total_passos)
                     
-                    if turno not in turnos: continue
+                    usou_cache = False
+                    dia_str, turno_str = str(dia), str(turno)
                     
+                    if cache_dados and dia_str in cache_dados and turno_str in cache_dados[dia_str]:
+                        leg_salva = cache_dados[dia_str][turno_str].get('legenda', '---')
+                        ass_salva = cache_dados[dia_str][turno_str].get('assinatura_nome', '???')
+                        
+                        if leg_salva not in ['---', '???', 'ERR', 'PND']:
+                            if opcao_escala == '2': dia_dados['bct'][turno] = leg_salva
+                            elif opcao_escala == '3': dia_dados['oea'][turno] = leg_salva
+                            dia_dados['meta'][turno]['assinatura_nome'] = ass_salva
+                            
+                            if opcao_escala == '1' and 'smc' in cache_dados[dia_str]:
+                                dia_dados['smc'] = cache_dados[dia_str]['smc']
+                                
+                            continue
+
+                    if turno not in turnos: 
+                        continue
+                        
                     arquivos = utils.buscar_arquivos_flexivel(path_mes, data_str, turno)
+                    # ... [O resto do código para baixo continua igual]
                     if not arquivos: continue
                     pdfs = [f for f in arquivos if f.lower().endswith('.pdf')]
                     if not pdfs:
@@ -451,6 +501,13 @@ def executar():
             # Quando a barra termina, precisamos quebrar a linha para não encavalar os textos:
             print("\n")
 
+            # SALVA O ESTADO INICIAL NO CACHE
+            if caminho_cache:
+                import json
+                try:
+                    with open(caminho_cache, 'w', encoding='utf-8') as f: json.dump(escala_detalhada, f, indent=4)
+                except: pass
+
             # --- 1. ANÁLISE PRÉVIA E PRIMEIRA EXIBIÇÃO ---
             if opcao_escala in ['2', '3']:
                 inconsistencias, correcoes, _ = verificar_e_propor_correcoes(escala_detalhada, mapa_ativo, ano_longo, mes)
@@ -468,7 +525,9 @@ def executar():
                 if opcao_escala in ['2', '3']:
                     _, _, alertas_ativos = verificar_e_propor_correcoes(escala_detalhada, mapa_ativo, ano_longo, mes)
 
-                teve_correcao_manual = realizar_auditoria_manual(escala_detalhada, mes, ano_curto, path_mes, opcao_escala, mapa_ativo, alertas_ativos)
+                teve_correcao_manual = realizar_auditoria_manual(
+                    escala_detalhada, mes, ano_curto, path_mes, opcao_escala, mapa_ativo, alertas_ativos, caminho_cache
+                )
                 
                 if teve_correcao_manual:
                     utils.limpar_tela()
