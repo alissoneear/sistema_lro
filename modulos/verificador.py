@@ -217,9 +217,21 @@ def executar():
         corrigir_anos_errados(lista_ano_errado, ano_curto, ano_errado)
 
         if problemas > 0 and relatorio:
-            print(f"\n{Cor.bg_BLUE}--- COPIAR E COBRAR ---{Cor.RESET}")
+            print(f"\n{Cor.bg_BLUE}{Cor.WHITE} --- COPIAR E COBRAR --- {Cor.RESET}")
             for l in relatorio: print(l)
             print("-" * 30 + "\n")
+            
+            # === NOVO: EXPORTAÇÃO AUTOMÁTICA DO RELATÓRIO ===
+            if utils.pedir_confirmacao(f">> Gerar ficheiro TXT com este relatório? (S/Enter p/ Sim, ESC p/ Não): "):
+                nome_relatorio = f"Relatorio_Pendencias_{mes}_{ano_longo}.txt"
+                caminho_relatorio = os.path.join(path_mes, nome_relatorio)
+                try:
+                    with open(caminho_relatorio, 'w', encoding='utf-8') as f:
+                        f.write(f"--- RELATÓRIO DE PENDÊNCIAS LRO ({mes}/{ano_longo}) ---\n\n")
+                        for l in relatorio: f.write(l + "\n")
+                    print(f"{Cor.GREEN}✅ Relatório salvo na pasta do mês: {nome_relatorio}{Cor.RESET}")
+                except Exception as e:
+                    print(f"{Cor.RED}Erro ao salvar o ficheiro: {e}{Cor.RESET}")
 
         if lista_para_criar:
             print(f"\n{Cor.CYAN}--- GERAÇÃO INTELIGENTE DE ARQUIVOS 'FALTA LRO' ---{Cor.RESET}")

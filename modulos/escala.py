@@ -329,8 +329,19 @@ def gerar_pdf_escala(escala_detalhada, mapa_ativo, opcao_escala, mes, ano_longo)
         print(f"{Cor.GREEN}✅ PDF gerado com sucesso!{Cor.RESET}")
         print(f"{Cor.CYAN}Guardado em: {caminho_saida}{Cor.RESET}")
         
-        if utils.pedir_confirmacao(f"\n{Cor.YELLOW}>> Deseja ABRIR o PDF gerado agora? (S/Enter p/ Sim, ESC p/ Não): {Cor.RESET}"):
+        print(f"\n{Cor.YELLOW}O que deseja fazer agora?{Cor.RESET}")
+        print("  [1] Abrir o PDF gerado")
+        print("  [2] Abrir a Pasta onde o PDF foi salvo")
+        print("  [0] Voltar ao Menu")
+        escolha = input(f">> Opção: ").strip()
+        
+        if escolha == '1':
             utils.abrir_arquivo(caminho_saida)
+        elif escolha == '2':
+            if os.name == 'nt': os.startfile(pasta_saida)
+            elif sys.platform == 'darwin': os.system(f'open "{pasta_saida}"')
+            else: os.system(f'xdg-open "{pasta_saida}"')
+
     except Exception as e:
         print(f"{Cor.RED}[!] Erro ao gravar o ficheiro PDF: {e}{Cor.RESET}")
 
@@ -384,6 +395,17 @@ def executar():
             escala_detalhada = {}
             mapa_ativo = mapa_bct if opcao_escala == '2' else mapa_oea 
 
+            # NOVO: CONFIGURAÇÃO DA BARRA DE PROGRESSO
+            import sys
+            total_passos = qtd_dias * 3
+            passo_atual = 0
+
+            def atualizar_barra(progresso, total):
+                percentual = 100 * (progresso / float(total)) if total > 0 else 100
+                barra = '█' * int(percentual / 5) + '-' * (20 - int(percentual / 5))
+                sys.stdout.write(f'\r{Cor.CYAN}Progresso: |{barra}| {percentual:.1f}% ({progresso}/{total}){Cor.RESET}')
+                sys.stdout.flush()
+
             # Extração de Dados
             for dia in range(1, qtd_dias + 1):
                 dia_fmt = f"{dia:02d}"
@@ -393,7 +415,12 @@ def executar():
                 dia_dados = {'smc': '---', 'bct': {1:'---',2:'---',3:'---'}, 'oea': {1:'---',2:'---',3:'---'},
                              'meta': {1:{'assinatura_nome':'???'}, 2:{'assinatura_nome':'???'}, 3:{'assinatura_nome':'???'}}}
 
-                for turno in turnos:
+                for turno in [1, 2, 3]:
+                    passo_atual += 1
+                    atualizar_barra(passo_atual, total_passos)
+                    
+                    if turno not in turnos: continue
+                    
                     arquivos = utils.buscar_arquivos_flexivel(path_mes, data_str, turno)
                     if not arquivos: continue
                     pdfs = [f for f in arquivos if f.lower().endswith('.pdf')]
@@ -420,6 +447,9 @@ def executar():
                     leg = dia_dados['bct'][t] if opcao_escala == '2' else dia_dados['oea'][t] if opcao_escala == '3' else '---'
                     escala_detalhada[dia][t] = {'legenda': leg, 'assinatura_nome': dia_dados['meta'][t]['assinatura_nome']}
                     if opcao_escala == '1': escala_detalhada[dia]['smc'] = dia_dados['smc']
+            
+            # Quando a barra termina, precisamos quebrar a linha para não encavalar os textos:
+            print("\n")
 
             # --- 1. ANÁLISE PRÉVIA E PRIMEIRA EXIBIÇÃO ---
             if opcao_escala in ['2', '3']:

@@ -274,3 +274,34 @@ def calcular_turnos_validos(dia, mes_str, dia_atual, mes_atual, hora_atual):
         elif hora_atual < 21: turnos = [1]
         else: turnos = [1, 2]
     return turnos
+
+def gerar_dashboard_boas_vindas():
+    import datetime
+    import glob
+    agora = datetime.datetime.now()
+    mes, ano = agora.strftime("%m"), agora.strftime("%y")
+    ano_longo = "20" + ano
+    
+    path_ano = os.path.join(Config.CAMINHO_RAIZ, f"LRO {ano_longo}")
+    path_mes = os.path.join(path_ano, Config.MAPA_PASTAS.get(mes, "X"))
+    
+    if not os.path.exists(path_mes):
+        return f"{Cor.RED}⚠️ Pasta do mês atual ({mes}/{ano_longo}) não detetada.{Cor.RESET}"
+        
+    lros_ok, pendentes = 0, 0
+    arquivos = glob.glob(os.path.join(path_mes, "*TURNO*"))
+    
+    for arq in arquivos:
+        nome = os.path.basename(arq).upper()
+        if "OK" in nome: lros_ok += 1
+        elif "FALTA" in nome or ".TXT" in nome: pendentes += 1
+        elif ".PDF" in nome: pendentes += 1 # PDF por verificar
+        
+    if pendentes == 0 and lros_ok > 0:
+        status_cor = Cor.GREEN
+    elif lros_ok == 0:
+        status_cor = Cor.GREY
+    else:
+        status_cor = Cor.YELLOW
+        
+    return f"📊 {status_cor}STATUS DO MÊS ({mes}/{ano}): {lros_ok} LROs OK | {pendentes} Pendências{Cor.RESET}"

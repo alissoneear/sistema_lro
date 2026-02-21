@@ -1,3 +1,4 @@
+import utils
 import time
 import sys
 from config import Cor
@@ -12,12 +13,16 @@ def menu_principal():
     while True:
         limpar_tela()
         print(f"{Cor.ORANGE}")
-        print("╔══════════════════════════════════════╗")
-        print("║                                      ║")
-        print("║             SISTEMA LRO              ║")
-        print("║                                      ║")
-        print("╚══════════════════════════════════════╝")
+        print("╔════════════════════════════════════════════════════════╗")
+        print("║                                                        ║")
+        print("║                      SISTEMA LRO                       ║")
+        print("║                                                        ║")
+        print("╚════════════════════════════════════════════════════════╝")
         print(f"{Cor.RESET}")
+        
+        # NOVO: EXIBIÇÃO DO DASHBOARD DE BOAS-VINDAS DO MÊS ATUAL
+        print(utils.gerar_dashboard_boas_vindas())
+        print(f"{Cor.GREY}" + "="*40 + f"{Cor.RESET}\n")
         
         print("Escolha uma funcionalidade:\n")
         print(f"  {Cor.CYAN}[1]{Cor.RESET} Verificador LRO (Validar/Assinar)")
