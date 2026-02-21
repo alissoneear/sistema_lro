@@ -2,9 +2,9 @@ import os
 
 class Config:
     if os.name == 'nt':
-        CAMINHO_RAIZ = r"R:\DO\COI\ARCC-CW\14 - LRO" #Prod
+        #CAMINHO_RAIZ = r"R:\DO\COI\ARCC-CW\14 - LRO" #Prod
+        CAMINHO_RAIZ = r"E:\dev\sistema_lro\ARQUIVOS" #Windows-Dev
     else:
-        #CAMINHO_RAIZ = r"E:\dev\sistema_lro\ARQUIVOS" #Windows-Dev
         CAMINHO_RAIZ = "/Users/alissonlourenco/Dev/sistema_lro/ARQUIVOS" #Mac
     
     MAPA_PASTAS = {
@@ -35,7 +35,7 @@ class DadosEfetivo:
 
     # Efetivo Padrão / Atual
     nomes_oea = [
-        '1S QSS BCO LUIZ FILIPE TERBECK - 1S TERBECK - 6032338',           # A
+        '1S BCO LUIZ FILIPE TERBECK - 1S TERBECK - 6032338',               # A
         '1S BCO RUI ANTONIO DOS SANTOS JUNIOR - 1S RUI - 6032311',         # B
         '2S BCO SAULO JULIO SANTOS GONÇALVES - 2S SAULO - 6134262',        # C
         '2S BCO KEVIN SOUZA DE OLIVEIRA - 2S KEVIN - 6157912',             # D
@@ -68,7 +68,7 @@ class DadosEfetivo:
         'CAP QOECTA FÁBIO CÉSAR SILVA DE OLIVEIRA - CAP FÁBIO CÉSAR',      # FCS
         'CAP QOECTA JOSÉ GUILHERME MALTA - CAP MALTA',                     # MAL
         'CAP QOECTA BARBARA PACHECO LINS - CAP BARBARA',                   # BAR
-        'CAP EDGAR HENRIQUE ESCOBAR DOS SANTOS - CAP ESCOBAR',             # ESC
+        'CAP QOECTA EDGAR HENRIQUE ESCOBAR DOS SANTOS - CAP ESCOBAR',      # ESC
         '1T AV DANIEL BUERY DE MELO CAMPELO - 1T CAMPELO',                 # CPL
         '1T QOECTA JAKSON DA SILVA - 1T JAKSON',                           # JAK
         '1T QOECTA JULIMAR CERUTTI DA SILVA - 1T CERUTTI'                  # CER
@@ -79,19 +79,18 @@ class DadosEfetivo:
             "bct": [
                 '1S BCT DIOGO FAVARO WUNDERLICH - 1S FAVARO - 4202317',            # A
                 '1S BCT RÉGIS FERRARI - 1S RÉGIS - 4378717',                       # B
-                '1S BCT EVANDRO MACHADO BITTENCOURT - 1S BITTENCOURT - 6087841',   # C
+                '1S BCT CLEON FRAGA DOS SANTOS - 1S CLEON - 4378660',              # C
                 '1S BCT MARCELO ZANOTTO GONÇALVES - 1S ZANOTTO - 6100775',         # D
                 '1S BCT GIOVANNI COCCO ALVES - 1S GIOVANNI - 6158080',             # E
                 '2S BCT YURI DE PAIVA WERNECK - 2S WERNECK - 6301371',             # F
                 '2S BCT YURI WIES TRAUER - 2S TRAUER - 6378781',                   # G
                 '2S BCT EDSON DE SOUZA NUNES - 2S EDSON - 6750451',                # H
-                'SO BCT MARCELO DE SOUZA PEREIRA - SO SOUZA - 3988554',            # I
+                '1S BCT MARCELO DE SOUZA PEREIRA - 1S SOUZA - 3988554',            # I
                 '1S BCT GUSTAVO FRACAO LAGO - 1S GUSTAVO - 4378482',               # J
-                '1S BCT CLEON FRAGA DOS SANTOS - 1S CLEON - 4378660',              # K
+                '1S BCT EVANDRO MACHADO BITTENCOURT - 1S BITTENCOURT - 6087841',   # K
                 '1S BCT CRISTIANO PAZ PRATES - 1S PRATES - 4378768',               # L
                 '2S BCT LIS CECI LYRA FONTES - 2S LIS - 6301118',                  # M
                 '2S BCT EDUARDO OLIVEIRA DE CASTRO - 2S DE CASTRO - 6576044',      # N
-                '1S BCT CHRISTIAN VICENTINI KUSS - 1S CHRISTIAN - 6009492'         # O
             ],
             "oea": nomes_oea 
         },
@@ -145,8 +144,8 @@ class DadosEfetivo:
                 '2S BCT EDSON DE SOUZA NUNES - 2S EDSON - 6750451',                # H
                 'SO BCT MARCELO DE SOUZA PEREIRA - SO SOUZA - 3988554',            # I
                 '1S BCT GUSTAVO FRACAO LAGO - 1S GUSTAVO - 4378482',               # J
-                '1S BCT CRISTIANO PAZ PRATES - 1S PRATES - 4378768',               # K
-                '1S BCT EVANDRO MACHADO BITTENCOURT - 1S BITTENCOURT - 6087841',   # L
+                '1S BCT EVANDRO MACHADO BITTENCOURT - 1S BITTENCOURT - 6087841',   # K
+                '1S BCT CRISTIANO PAZ PRATES - 1S PRATES - 4378768',               # L
                 '2S BCT LIS CECI LYRA FONTES - 2S LIS - 6301118',                  # M
                 '2S BCT EDUARDO OLIVEIRA DE CASTRO - 2S DE CASTRO - 6576044'       # N
             ],
