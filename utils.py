@@ -178,32 +178,45 @@ def extrair_dados_texto(texto_linear, dados, mes=None, ano_curto=None):
     todas_linhas_efetivo = nomes_oea + nomes_bct + nomes_smc
 
     def obter_nome_oficial(texto_alvo):
-        """Pesquisa o nome base no dicionário e retorna a string oficial completa."""
+        """Pesquisa o militar através do Nome de Guerra ou do Primeiro + Segundo Nome."""
         if not texto_alvo: return None
         texto_norm = normalizar_texto(texto_alvo)
         
-        lista_buscas = []
+        # Lista de palavras a ignorar para isolar apenas o nome civil
+        patentes_quadros = ['1S', '2S', '3S', 'SO', 'TEN', '1T', '2T', 'CAP', 'MAJ', 'CEL', 'BCO', 'BCT', 'QSS', 'QOECTA', 'AV']
+        
         for linha in todas_linhas_efetivo:
             partes = [p.strip() for p in linha.split('-')]
-            nome_oficial = partes[0] # Ex: "2S BCO KEVIN SOUZA DE OLIVEIRA"
+            nome_oficial = partes[0]
             nome_guerra = partes[1] if len(partes) > 1 else nome_oficial
-            nome_base = extrair_nome_base(nome_guerra) # Ex: "KEVIN"
-            lista_buscas.append((nome_base, nome_oficial))
-        
-        # Ordena para garantir que não haja falsos positivos (nomes contidos em outros)
-        lista_buscas.sort(key=lambda x: len(x[0]), reverse=True)
-        
-        for nome_base, nome_oficial in lista_buscas:
+            nome_base = extrair_nome_base(nome_guerra)
+            
+            # Isola apenas o nome civil (Ex: "FRANCISCO TORRES SOARES")
+            nome_oficial_norm = normalizar_texto(nome_oficial)
+            palavras = [w for w in nome_oficial_norm.split() if w not in patentes_quadros]
+            nome_pessoal = " ".join(palavras)
+            
+            # Pega os primeiros dois nomes (Ex: "FRANCISCO TORRES")
+            primeiros_dois = " ".join(palavras[:2]) if len(palavras) >= 2 else nome_pessoal
+            
+            # Regras de Match:
+            # 1. Nome de guerra está no texto? (Ex: SOARES)
             if re.search(rf'\b{re.escape(nome_base)}\b', texto_norm):
                 return nome_oficial
+            # 2. Nome civil completo está no texto?
+            if nome_pessoal and nome_pessoal in texto_norm:
+                return nome_oficial
+            # 3. Primeiro e segundo nome estão no texto? (Ex: FRANCISCO TORRES)
+            if primeiros_dois and primeiros_dois in texto_norm:
+                return nome_oficial
+                
         return None
 
-    # Aplicação da padronização
     if responsavel_bruto:
         nome_encontrado = obter_nome_oficial(responsavel_bruto)
         dados["responsavel"] = nome_encontrado if nome_encontrado else responsavel_bruto
     else:
-        # Fallback Inteligente: varre o final do documento e devolve o nome completo
+        # Fallback Inteligente
         texto_final = normalizar_texto(texto_linear[-300:])
         nome_encontrado = obter_nome_oficial(texto_final)
         dados["responsavel"] = nome_encontrado if nome_encontrado else "---"
