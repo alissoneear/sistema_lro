@@ -24,6 +24,8 @@ def exibir_dados_analise(info):
     print("-" * 60)
     print(f"📅 {Cor.GREEN}{info['cabecalho']}{Cor.RESET}")
     print(f"👤 RESPONSÁVEL: {Cor.CYAN}{info['responsavel']}{Cor.RESET}")
+    if info.get("inconsistencia_data"):
+        print(f"{Cor.bg_RED}{Cor.WHITE}⚠️ ALERTA DE COPIAR/COLAR: {info['inconsistencia_data']} {Cor.RESET}")
     if info['assinatura']: print(f"🔏 ASSINATURA: {Cor.GREEN}OK (Certificado Digital Detectado) ✅{Cor.RESET}")
     else: print(f"🔏 ASSINATURA: {Cor.RED}NÃO DETECTADA NA ESTRUTURA ❌{Cor.RESET}")
     print("-" * 60)

@@ -237,24 +237,51 @@ def extrair_dados_texto(texto_linear, dados, mes=None, ano_curto=None):
         dados["equipe"]["oea"] = busca_inteligente_equipe(txt_eq, m_oea)
 
 def analisar_conteudo_lro(caminho_pdf, mes=None, ano_curto=None):
+    # Dicionário blindado: Se qualquer coisa falhar, ele devolve os valores abaixo e evita o crash!
     dados = {
-        "cabecalho": "---", "responsavel": "---", "recebeu": "---", "passou": "---", 
+        "cabecalho": "---",
+        "responsavel": "---",
         "equipe": {"smc": "---", "bct": "---", "oea": "---"},
         "assinatura": verificar_assinatura_estrutural(caminho_pdf),
         "texto_completo": "",
-        "texto_equipe": "" 
+        "texto_equipe": "",
+        "recebeu": "---", # 👉 PROTEÇÃO ADICIONADA AQUI
+        "passou": "---",  # 👉 PROTEÇÃO ADICIONADA AQUI
+        "inconsistencia_data": None
     }
+    
     if PLUMBER_ENABLED:
         try:
             with pdfplumber.open(caminho_pdf) as pdf:
                 texto_completo = "".join([pagina.extract_text() or "" for pagina in pdf.pages])
                 texto_linear = texto_completo.replace('\n', ' ')
+                
                 dados["texto_completo"] = texto_linear
+                
                 if not dados["assinatura"] and "validar.iti.gov.br" in texto_linear.lower():
                     dados["assinatura"] = True
-                # Repassar mes e ano aqui:
+                    
+                # ====================================================
+                # NOVO: AUDITORIA DE COPIAR E COLAR (INCONSISTÊNCIA)
+                # ====================================================
+                nome_arq = os.path.basename(caminho_pdf)
+                match_arq = re.search(r'^(\d{2})', nome_arq) 
+                
+                if match_arq:
+                    dia_arq = match_arq.group(1)
+                    match_txt = re.search(r'do dia\s+(\d{1,2})\s+de', texto_linear, re.IGNORECASE)
+                    
+                    if match_txt:
+                        dia_txt = str(int(match_txt.group(1))).zfill(2)
+                        if dia_arq != dia_txt:
+                            dados["inconsistencia_data"] = f"ARQUIVO É DIA {dia_arq} ❌ MAS O TEXTO DIZ DIA {dia_txt}"
+                # ====================================================
+                
+                # Chamada crucial que alimenta o 'recebeu' e 'passou'
                 extrair_dados_texto(texto_linear, dados, mes, ano_curto)
-        except Exception: pass
+        except Exception: 
+            pass # Se algo falhar na leitura, ele engole o erro e retorna o dicionário blindado.
+            
     return dados
 
 def buscar_arquivos_flexivel(pasta, data_string, turno):
