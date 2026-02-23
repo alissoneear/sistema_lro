@@ -99,6 +99,14 @@ def imprimir_tabela(escala_detalhada, qtd_dias, opcao_escala, ano_longo, mes):
 
 def realizar_auditoria_manual(escala_detalhada, mes, ano_curto, path_mes, opcao_escala, mapa_ativo, alertas_suspeitos=None, caminho_cache=None):
     """Procura falhas na extração OU alertas da auditoria e abre o PDF exibindo os motivos."""
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.align import Align
+    from rich.text import Text
+    import os
+    
+    console = Console()
+
     if alertas_suspeitos is None: alertas_suspeitos = {}
     pendentes = []
     dias = sorted(escala_detalhada.keys())
@@ -130,44 +138,82 @@ def realizar_auditoria_manual(escala_detalhada, mes, ano_curto, path_mes, opcao_
     if not pendentes:
         return False 
         
-    print(f"\n{Cor.YELLOW}⚠️ Foram detetados {len(pendentes)} turnos pendentes de revisão.{Cor.RESET}")
-    if not utils.pedir_confirmacao(f"{Cor.CYAN}>> Deseja realizar a AUDITORIA MANUAL agora? (S/Enter p/ Sim, ESC p/ Pular): {Cor.RESET}"):
+    # ========================================================
+    # 1. PAINEL DE INÍCIO DA AUDITORIA
+    # ========================================================
+    console.print("\n")
+    painel_auditoria = Panel(
+        f"[bold white]Existem [dark_orange]{len(pendentes)}[/dark_orange] turnos pendentes de revisão.[/bold white]",
+        title="[bold dark_orange]🔎 INICIAR AUDITORIA MANUAL[/bold dark_orange]",
+        border_style="dark_orange",
+        padding=(1, 2),
+        width=75
+    )
+    console.print(Align.center(painel_auditoria))
+    console.print()
+
+    import utils
+    if not utils.pedir_confirmacao(f" " * 5 + f">> Deseja realizar a AUDITORIA MANUAL agora? (S/Enter p/ Sim, ESC p/ Pular): "):
         return False
         
     validas = [dados['legenda'] for dados in mapa_ativo.values()]
     
-    # CRIAÇÃO DO MENU VISUAL DE LEGENDAS (Cheat Sheet)
-    itens_ordenados = sorted(mapa_ativo.items(), key=lambda x: x[1]['legenda'])
-    linhas_menu = []
-    linha_atual = []
-    
-    for nome_guerra, dados in itens_ordenados:
-        linha_atual.append(f"[{dados['legenda']}] {nome_guerra}")
-        if len(linha_atual) == 4:
-            linhas_menu.append("  ".join(f"{item:<22}" for item in linha_atual))
-            linha_atual = []
-            
-    if linha_atual:
-        linhas_menu.append("  ".join(f"{item:<22}" for item in linha_atual))
+    # ========================================================
+    # 2. CRIAÇÃO DO MAPA VISUAL DE LEGENDAS (Padrão Rich)
+    # ========================================================
+    nome_escala = "SMC" if opcao_escala == '1' else "BCT" if opcao_escala == '2' else "OEA"
+    cor_titulo = "cyan" if opcao_escala == '1' else "green" if opcao_escala == '2' else "dark_orange"
+
+    def gerar_texto_mapa(nome_esc, mapa, cor):
+        txt = Text()
+        txt.append(f"■ EQUIPE {nome_esc}:\n", style=f"bold {cor}")
+        itens = [f"[{v['legenda']}] {k.split('-')[0].strip()}" for k, v in mapa.items()]
         
-    mapa_visual = "\n".join(linhas_menu)
+        linhas = []
+        for i in range(0, len(itens), 4):
+            linha = itens[i:i+4]
+            linhas.append("   " + "".join(item.ljust(22) for item in linha))
+            
+        txt.append("\n".join(linhas), style="white")
+        return txt
+
+    mapa_visual_text = gerar_texto_mapa(nome_escala, mapa_ativo, cor_titulo)
+    painel_mapa = Panel(
+        mapa_visual_text,
+        title="[bold yellow]✏️ MAPA DE LEGENDAS[/bold yellow]",
+        border_style="yellow",
+        padding=(1, 2)
+    )
     
     modificado = False
+    
+    MESES_NOME = {
+        "01": "janeiro", "02": "fevereiro", "03": "março",
+        "04": "abril", "05": "maio", "06": "junho",
+        "07": "julho", "08": "agosto", "09": "setembro",
+        "10": "outubro", "11": "novembro", "12": "dezembro"
+    }
     
     for dia, t, leg_atual, motivos in pendentes:
         dia_fmt = f"{dia:02d}"
         data_str = f"{dia_fmt}{mes}{ano_curto}"
+        mes_limpo = MESES_NOME.get(mes, "mês")
         
-        # Cabeçalho da auditoria focado no turno e nos motivos
+        # ========================================================
+        # 3. RÉGUA SEPARADORA E MOTIVOS DE AUDITORIA
+        # ========================================================
+        console.print("\n")
         if opcao_escala == '1':
-            print(f"\n{Cor.bg_BLUE}{Cor.WHITE} Auditando: Dia {dia_fmt} - SMC {Cor.RESET}")
+            console.rule(f"[bold deep_sky_blue1]▶ Auditando: Dia {dia_fmt} de {mes_limpo} - SMC [/bold deep_sky_blue1]", style="deep_sky_blue1")
             arquivos = utils.buscar_arquivos_flexivel(path_mes, data_str, 1) 
         else:
-            print(f"\n{Cor.bg_BLUE}{Cor.WHITE} Auditando: Dia {dia_fmt} - {t}º Turno {Cor.RESET}")
+            console.rule(f"[bold deep_sky_blue1]▶ Auditando: Dia {dia_fmt} de {mes_limpo} - {t}º Turno [/bold deep_sky_blue1]", style="deep_sky_blue1")
             arquivos = utils.buscar_arquivos_flexivel(path_mes, data_str, t)
             
+        console.print()
         for m in motivos:
-            print(f"{Cor.YELLOW} ↳ Motivo:{Cor.RESET} {m}")
+            console.print(Align.center(f"[bold red]📌 MOTIVO:[/bold red] [white]{m}[/white]"))
+        console.print()
             
         pdfs = [f for f in arquivos if f.lower().endswith('.pdf')]
         arquivo_alvo = None
@@ -176,17 +222,20 @@ def realizar_auditoria_manual(escala_detalhada, mes, ano_curto, path_mes, opcao_
             arquivo_alvo = ok_files[0] if ok_files else pdfs[0]
             
         if arquivo_alvo:
-            print(f"{Cor.GREY}A abrir o documento: {os.path.basename(arquivo_alvo)}{Cor.RESET}")
+            from config import Cor
+            console.print(Align.center(f"[dim grey]Abrindo o documento: {os.path.basename(arquivo_alvo)}...[/dim grey]"))
             utils.abrir_arquivo(arquivo_alvo)
         else:
-            print(f"{Cor.RED}[!] Nenhum PDF encontrado para este turno.{Cor.RESET}")
+            console.print(Align.center("[bold red][!] Nenhum PDF encontrado para este turno.[/bold red]"))
             
-        # 👇 AQUI EXIBIMOS O MAPA ANTES DE PEDIR O INPUT 👇
-        print(f"\n{Cor.CYAN}--- MAPA DE LEGENDAS DO MÊS ---{Cor.RESET}")
-        print(mapa_visual)
-        print(f"{Cor.CYAN}-------------------------------{Cor.RESET}")
+        # ========================================================
+        # 4. EXIBIÇÃO DO MAPA E INPUT DO UTILIZADOR
+        # ========================================================
+        console.print("\n")
+        console.print(Align.center(painel_mapa))
+        console.print(Align.center("[dim grey](Deixe em branco e aperte Enter para manter a legenda atual)[/dim grey]\n"))
         
-        nova_leg = input(f"Digite a legenda correspondente ou Enter p/ manter [{leg_atual}]: ").strip().upper()
+        nova_leg = input(f"   Digite a nova legenda ou Enter p/ manter [{leg_atual}]: ").strip().upper()
         
         if nova_leg:
             if nova_leg in validas:
@@ -195,7 +244,7 @@ def realizar_auditoria_manual(escala_detalhada, mes, ano_curto, path_mes, opcao_
                 else:
                     escala_detalhada[dia][t]['legenda'] = nova_leg
                 modificado = True
-                print(f"{Cor.GREEN}✅ Legenda atualizada para: {nova_leg}{Cor.RESET}")
+                console.print(f"\n[bold green]   ✅ Legenda atualizada para: {nova_leg}[/bold green]")
 
                 # SALVAMENTO AUTOMÁTICO NO CACHE
                 if caminho_cache:
@@ -204,9 +253,9 @@ def realizar_auditoria_manual(escala_detalhada, mes, ano_curto, path_mes, opcao_
                         with open(caminho_cache, 'w', encoding='utf-8') as f: json.dump(escala_detalhada, f, indent=4)
                     except: pass
             else:
-                print(f"{Cor.RED}⚠️ Legenda '{nova_leg}' inválida. A manter '{leg_atual}'.{Cor.RESET}")
+                console.print(f"\n[bold red]   ⚠️ Legenda '{nova_leg}' inválida. A manter '{leg_atual}'.[/bold red]")
         else:
-            print(f"{Cor.GREY}Mantido: {leg_atual}{Cor.RESET}")
+            console.print(f"\n[dim grey]   Mantido: {leg_atual}[/dim grey]")
             
     return modificado
 
@@ -512,23 +561,39 @@ def executar():
             mapa_ativo = mapa_bct if opcao_escala == '2' else mapa_oea 
 
             # CONFIGURAÇÃO DA BARRA DE PROGRESSO FLUIDA (RICH PREMIUM)
-            from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn, TimeElapsedColumn, SpinnerColumn
-            
+            from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, SpinnerColumn, ProgressColumn
+            from rich.text import Text
+
+            # Criando medidores de tempo 100% customizados e em português!
+            class TempoDecorridoBR(ProgressColumn):
+                def render(self, task):
+                    elapsed = task.elapsed
+                    if elapsed is None: return Text("0 seg", style="bold yellow")
+                    mins, secs = divmod(int(elapsed), 60)
+                    return Text(f"{mins} min {secs} seg" if mins > 0 else f"{secs} seg", style="bold yellow")
+
+            class TempoRestanteBR(ProgressColumn):
+                def render(self, task):
+                    remaining = task.time_remaining
+                    if remaining is None: return Text("--", style="bold deep_sky_blue1")
+                    mins, secs = divmod(int(remaining), 60)
+                    return Text(f"{mins} min {secs} seg" if mins > 0 else f"{secs} seg", style="bold deep_sky_blue1")
+
             total_passos = qtd_dias * 3
             
             progress = Progress(
-                SpinnerColumn("dots", style="bold dark_orange"), # Rodinha giratória laranja
-                TextColumn("[bold white]{task.description}"),    # Texto "A extrair dados..." em branco
+                SpinnerColumn("dots", style="bold dark_orange"),
+                TextColumn("[bold white]{task.description}"),
                 BarColumn(
-                    bar_width=45, 
-                    style="grey37",                      # Cor da barra vazia (cinza escuro)
-                    complete_style="bold dark_orange"    # Cor da barra cheia (laranja)
+                    bar_width=30, # Deixei a barra um pouco mais compacta para caber os textos novos
+                    style="grey37",                      
+                    complete_style="bold dark_orange"    
                 ),
-                TaskProgressColumn(text_format="[bold cyan]{task.percentage:>3.0f}%"), # Porcentagem em ciano
-                TextColumn("[dim grey]•[/dim grey]"),
-                TimeElapsedColumn(),                     # Tempo percorrido
-                TextColumn("[dim grey]• ETA:[/dim grey]"),
-                TimeRemainingColumn()                    # Tempo restante
+                TaskProgressColumn(text_format="[bold cyan]{task.percentage:>3.0f}%"), 
+                TextColumn("[dim grey]• Decorrido:[/dim grey]"),
+                TempoDecorridoBR(),                      # 👈 Nossa coluna customizada!
+                TextColumn("[dim grey]• Restante:[/dim grey]"),
+                TempoRestanteBR()                        # 👈 Nossa coluna customizada!
             )
             tarefa_extracao = progress.add_task("Extraindo dados...", total=total_passos)
             

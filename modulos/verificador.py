@@ -233,15 +233,22 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
                         txt = Text()
                         txt.append(f"■ EQUIPE {nome_escala}:\n", style=f"bold {cor_titulo}")
                         itens = [f"[{v['legenda']}] {k.split('-')[0].strip()}" for k, v in mapa.items()]
+                        
+                        # 👈 Guardamos as linhas numa lista primeiro
+                        linhas = []
                         for i in range(0, len(itens), 4):
                             linha = itens[i:i+4]
-                            txt.append("   " + "".join(item.ljust(22) for item in linha) + "\n", style="white")
-                        txt.append("\n")
+                            linhas.append("   " + "".join(item.ljust(22) for item in linha))
+                            
+                        # 👈 Juntamos tudo sem deixar Enter no final
+                        txt.append("\n".join(linhas), style="white")
                         return txt
                         
                     mapa_completo = Text()
                     mapa_completo.append(gerar_texto_mapa("SMC", m_smc, "cyan"))
+                    mapa_completo.append("\n\n") # 👈 Adicionamos um respiro entre as equipas
                     mapa_completo.append(gerar_texto_mapa("BCT", m_bct, "green"))
+                    mapa_completo.append("\n\n") # 👈 Adicionamos um respiro entre as equipas
                     mapa_completo.append(gerar_texto_mapa("OEA", m_oea, "dark_orange"))
                     
                     painel_mapa = Panel(
