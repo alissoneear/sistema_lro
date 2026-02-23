@@ -259,8 +259,21 @@ def extrair_nome_relato(raw_str, mes=None, ano_curto=None):
     return "???"
 
 def executar():
+    import os
+    import time
+    import datetime
+    import calendar
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.align import Align
+    from rich.text import Text
+    from rich.prompt import Prompt
+    
+    console = Console()
+
     if os.name == 'nt' and not os.path.exists(Config.CAMINHO_RAIZ):
-        input(f"{Cor.RED}[ERRO CRÍTICO] Caminho {Config.CAMINHO_RAIZ} não encontrado.{Cor.RESET}")
+        console.print(Align.center(Panel(f"[bold red][ERRO CRÍTICO] Caminho {Config.CAMINHO_RAIZ} não encontrado.[/bold red]", border_style="red")))
+        input()
         return
 
     while True:
@@ -268,12 +281,25 @@ def executar():
         agora = datetime.datetime.now()
         mes_atual, ano_atual_curto = agora.strftime("%m"), agora.strftime("%y")
 
-        print(f"{Cor.CYAN}=== Verificador LRO ==={Cor.RESET}")
-        if os.name == 'nt': print(f"{Cor.GREY}Conectado: {Config.CAMINHO_RAIZ}{Cor.RESET}")
-        
-        inp_mes = input(f"MÊS (Enter para {mes_atual}): ")
+        # ========================================================
+        # 1. PAINEL DE TÍTULO DO MÓDULO
+        # ========================================================
+        titulo = Text("SISTEMA LRO\nVerificador e Assinador de Documentos", justify="center", style="bold dark_orange")
+        painel_titulo = Panel(titulo, border_style="dark_orange", padding=(1, 2), width=65)
+        console.print(Align.center(painel_titulo))
+        console.print("\n")
+
+        # ========================================================
+        # 2. INPUT DE MÊS E ANO (Modernizado)
+        # ========================================================
+        if os.name == 'nt': 
+            console.print(Align.center(f"[dim grey]Conectado: {Config.CAMINHO_RAIZ}[/dim grey]"))
+            console.print()
+            
+        inp_mes = console.input(" " * 18 + f"[bold dark_orange]MÊS[/bold dark_orange] [dim white](Enter para {mes_atual}):[/dim white] ").strip()
         mes = inp_mes.zfill(2) if inp_mes else mes_atual
-        inp_ano = input(f"ANO (Enter para {ano_atual_curto}): ")
+        
+        inp_ano = console.input(" " * 18 + f"[bold dark_orange]ANO[/bold dark_orange] [dim white](Enter para {ano_atual_curto}):[/dim white] ").strip()
         ano_curto = inp_ano if inp_ano else ano_atual_curto
         
         ano_longo = "20" + ano_curto
@@ -283,13 +309,13 @@ def executar():
         path_ano = os.path.join(Config.CAMINHO_RAIZ, f"LRO {ano_longo}")
             
         if not os.path.exists(path_ano):
-            print(f"{Cor.RED}Pasta LRO {ano_longo} não existe.{Cor.RESET}")
+            console.print(Align.center(Panel(f"[bold red]Pasta LRO {ano_longo} não existe.[/bold red]", border_style="red")))
             time.sleep(2)
             continue
             
         path_mes = os.path.join(path_ano, Config.MAPA_PASTAS.get(mes, "X"))
         if not os.path.exists(path_mes):
-            print(f"{Cor.RED}Pasta do mês não encontrada.{Cor.RESET}")
+            console.print(Align.center(Panel(f"[bold red]Pasta do mês {mes} não encontrada em {path_ano}.[/bold red]", border_style="red")))
             time.sleep(2)
             continue 
 
@@ -298,8 +324,13 @@ def executar():
             
         if mes == mes_atual and ano_curto == ano_atual_curto: qtd_dias = agora.day
 
-        print(f"\n{Cor.YELLOW}>> Analisando {Config.MAPA_PASTAS.get(mes)}...{Cor.RESET}")
-        print("-" * 60)
+        # ========================================================
+        # 3. BARRA DE PROGRESSO DE LEITURA DAS PASTAS
+        # ========================================================
+        utils.limpar_tela()
+        titulo_analise = Text(f"ANALISANDO DIRETÓRIOS: {Config.MAPA_PASTAS.get(mes)} / {ano_longo}", justify="center", style="bold white on deep_sky_blue1")
+        console.print(Align.center(Panel(titulo_analise, border_style="deep_sky_blue1", width=65)))
+        console.print("\n")
 
         problemas = 0
         relatorio, lista_pendentes, lista_para_criar, lista_ano_errado = [], [], [], []
