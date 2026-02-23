@@ -18,24 +18,47 @@ def corrigir_anos_errados(lista_ano_errado, ano_curto, ano_errado):
                     print(f"{Cor.GREEN}   Renomeado com sucesso.{Cor.RESET}")
                 except Exception as e: print(f"{Cor.RED}   Erro ao renomear: {e}{Cor.RESET}")
 
-def exibir_dados_analise(info):
+def exibir_dados_analise(info, data_formatada):
+    from rich.panel import Panel
+    from rich.text import Text
+    from rich.align import Align
+    from rich.console import Console
+    console = Console()
+
     if not info: return
-    print("-" * 60)
-    print(f"📅 {Cor.GREEN}{info['cabecalho']}{Cor.RESET}")
-    print(f"👤 RESPONSÁVEL: {Cor.CYAN}{info['responsavel']}{Cor.RESET}")
-    if info.get("inconsistencia_data"):
-        print(f"{Cor.bg_RED}{Cor.WHITE}⚠️ ALERTA DE COPIAR/COLAR: {info['inconsistencia_data']} {Cor.RESET}")
-    if info['assinatura']: print(f"🔏 ASSINATURA: {Cor.GREEN}OK (Certificado Digital Detectado) ✅{Cor.RESET}")
-    else: print(f"🔏 ASSINATURA: {Cor.RED}NÃO DETECTADA NA ESTRUTURA ❌{Cor.RESET}")
-    print("-" * 60)
-    print(f"⬅️ Recebeu: {info['recebeu']}")
-    print(f"➡️ Passou:  {info['passou']}")
     
-    print(f"{Cor.WHITE}👥 Equipe:{Cor.RESET}") 
-    print(f"   • SMC: {info['equipe']['smc']}")
-    print(f"   • BCT: {info['equipe']['bct']}")
-    print(f"   • OEA: {info['equipe']['oea']}")
-    print("-" * 60)
+    conteudo = Text()
+    conteudo.append("👤 RESPONSÁVEL: ", style="bold white")
+    conteudo.append(f"{info['responsavel']}\n", style="bold cyan")
+    
+    if info.get("inconsistencia_data"):
+        conteudo.append(f"⚠️ ALERTA DE COPIAR/COLAR: {info['inconsistencia_data']}\n", style="bold white on red")
+        
+    if info['assinatura']:
+        conteudo.append("🔏 ASSINATURA: ", style="bold white")
+        conteudo.append("OK (Certificado Digital Detectado) ✅\n\n", style="bold green")
+    else:
+        conteudo.append("🔏 ASSINATURA: ", style="bold white")
+        conteudo.append("NÃO DETECTADA NA ESTRUTURA ❌\n\n", style="bold red")
+        
+    conteudo.append("⬅️ Recebeu: ", style="dim white")
+    conteudo.append(f"{info['recebeu']}\n", style="white")
+    conteudo.append("➡️ Passou:  ", style="dim white")
+    conteudo.append(f"{info['passou']}\n\n", style="white")
+    
+    conteudo.append("👥 EQUIPE ESCALADA:\n", style="bold deep_sky_blue1")
+    conteudo.append(f"   • SMC: {info['equipe']['smc']}\n")
+    conteudo.append(f"   • BCT: {info['equipe']['bct']}\n")
+    conteudo.append(f"   • OEA: {info['equipe']['oea']}")
+
+    painel = Panel(
+        conteudo,
+        title=f"[bold green]{data_formatada}[/bold green]", # 👈 Título atualizado aqui!
+        border_style="green",
+        padding=(1, 2),
+        width=75
+    )
+    console.print(Align.center(painel))
 
 def renomear_arquivo(caminho_atual, novo_caminho):
     while True:
@@ -54,6 +77,7 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
     from rich.console import Console
     from rich.panel import Panel
     from rich.align import Align
+    from rich.text import Text
     console = Console()
     
     if not lista_pendentes: return
@@ -74,28 +98,41 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
     print("\n")
     abrir_pdfs = utils.pedir_confirmacao(f"{Cor.YELLOW}Deseja ABRIR os PDFs para acompanhamento? (S/Enter p/ Sim, ESC p/ Modo Rápido): {Cor.RESET}")
     
-    # PERGUNTA PARA INTEGRAÇÃO COM A ESCALA CUMPRIDA
     integrar_escala = utils.pedir_confirmacao(f"{Cor.YELLOW}Deseja alimentar a ESCALA CUMPRIDA durante a verificação? (S/Enter p/ Sim, ESC p/ Não): {Cor.RESET}")
+
+    # Dicionário interno rápido para mapear o mês perfeito
+    MESES_NOME = {
+        "01": "janeiro", "02": "fevereiro", "03": "março",
+        "04": "abril", "05": "maio", "06": "junho",
+        "07": "julho", "08": "agosto", "09": "setembro",
+        "10": "outubro", "11": "novembro", "12": "dezembro"
+    }
 
     for cnt, item in enumerate(lista_pendentes, start=1):
         caminho, data_str, turno = item['path'], item['data'], item['turno']
         nome_atual = os.path.basename(caminho)
         
-        print("\n\n") 
-        print(f"{Cor.bg_ORANGE}{Cor.WHITE}  ▶ LIVRO ({cnt}/{len(lista_pendentes)}) - Arquivo: {nome_atual}  {Cor.RESET}")
+        # 👈 Geramos a data padronizada uma única vez aqui
+        mes_limpo = MESES_NOME.get(mes, "mês")
+        data_formatada = f"📅 Dia {data_str[:2]} de {mes_limpo} de 20{ano_curto} | {turno}º Turno"
+        
+        console.print("\n") 
+        console.rule(f"[bold dark_orange]▶ LIVRO ({cnt}/{len(lista_pendentes)}) - {nome_atual}[/bold dark_orange]", style="dark_orange")
         
         if abrir_pdfs:
             utils.abrir_arquivo(caminho)
             
-        print(f"{Cor.GREY}A analisar estrutura e texto...{Cor.RESET}")
+        console.print(Align.center("\n[dim grey]Analisando estrutura e texto do PDF...[/dim grey]\n"))
         info = utils.analisar_conteudo_lro(caminho, mes, ano_curto)
-        exibir_dados_analise(info)
+        
+        # 👈 Passamos a data perfeita para o painel verde
+        exibir_dados_analise(info, data_formatada)
         
         dir_arq = os.path.dirname(caminho)
         extensao = os.path.splitext(caminho)[1]
         
         if info['assinatura']:
-            if utils.pedir_confirmacao(">> Confirmar e assinar OK? (S/Enter p/ Sim, ESC p/ Não): "):
+            if utils.pedir_confirmacao("\n>> Confirmar e assinar OK? (S/Enter p/ Sim, ESC p/ Não): "):
                 novo_nome_base = f"{data_str}_{turno}TURNO OK{extensao}"
                 novo_caminho = os.path.join(dir_arq, novo_nome_base)
                 renomear_arquivo(caminho, novo_caminho)
@@ -109,7 +146,7 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
                 resp_base = utils.extrair_nome_base(info.get('responsavel', ''))
                 sugestao_str = f" ({resp_base})" if resp_base not in ["---", "???", ""] else ""
             
-            msg = f">> {Cor.RED}ASSINATURA AUSENTE!{Cor.RESET} Renomear p/ FALTA ASS{sugestao_str}? (S/Enter p/ Sim, ESC p/ Não): "
+            msg = f"\n>> {Cor.RED}ASSINATURA AUSENTE!{Cor.RESET} Renomear p/ FALTA ASS{sugestao_str}? (S/Enter p/ Sim, ESC p/ Não): "
             if utils.pedir_confirmacao(msg):
                 novo_nome_base = f"{data_str}_{turno}TURNO FALTA ASS{sugestao_str}{extensao}"
                 novo_caminho = os.path.join(dir_arq, novo_nome_base)
@@ -117,7 +154,6 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
             else:
                 print(f"{Cor.GREY}   [-] Mantido.{Cor.RESET}")
                 
-        # ALIMENTAÇÃO DO CACHE DA ESCALA CUMPRIDA
         if integrar_escala:
             import json
             m_smc, m_bct, m_oea = DadosEfetivo.mapear_efetivo(mes, ano_curto)
@@ -137,11 +173,33 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
                 return "???"
             
             while True:
-                print(f"\n{Cor.bg_BLUE}{Cor.WHITE} Aceitar inserção dos dados na escala cumprida? {Cor.RESET}")
-                print(f"DIA {data_str[:2]} de {Config.MAPA_PASTAS.get(mes, '')} de 20{ano_curto} | {turno}º Turno")
-                print(f" • SMC: {n_smc} ({Cor.CYAN}{l_smc}{Cor.RESET})")
-                print(f" • BCT: {n_bct} ({Cor.CYAN}{l_bct}{Cor.RESET})")
-                print(f" • OEA: {n_oea} ({Cor.CYAN}{l_oea}{Cor.RESET})")
+                console.print("\n")
+                texto_escala = Text()
+                
+                # 👈 Título perfeitamente igual ao de cima
+                texto_escala.append(f"{data_formatada}\n\n", style="bold white")
+                
+                # 👈 Cores 100% padronizadas!
+                texto_escala.append(" • SMC: ", style="bold cyan")
+                texto_escala.append(f"{n_smc} ", style="white")
+                texto_escala.append(f"({l_smc})\n", style="bold cyan") 
+                
+                texto_escala.append(" • BCT: ", style="bold green")
+                texto_escala.append(f"{n_bct} ", style="white")
+                texto_escala.append(f"({l_bct})\n", style="bold green") 
+                
+                texto_escala.append(" • OEA: ", style="bold dark_orange") 
+                texto_escala.append(f"{n_oea} ", style="white")
+                texto_escala.append(f"({l_oea})", style="bold dark_orange") 
+                
+                painel_escala = Panel(
+                    texto_escala,
+                    title="[bold yellow] 💾 INSERIR DADOS NA ESCALA CUMPRIDA? [/bold yellow]", 
+                    border_style="yellow", 
+                    padding=(1, 2),
+                    width=75
+                )
+                console.print(Align.center(painel_escala))
                 
                 print(f"\n>> Opção [S/Enter=Sim | M=Modificar | ESC=Não]: ", end='', flush=True)
                 
@@ -166,36 +224,39 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
                     acao = 'M' if resp == 'M' else 'N' if resp == 'ESC' else 'S'
                 
                 if acao == 'N':
-                    print(f"{Cor.GREY}   [-] Inserção ignorada.{Cor.RESET}")
+                    console.print(Align.center("[dim grey][-]\tInserção ignorada.[/dim grey]"))
                     break
                 elif acao == 'M':
-                    print(f"\n{Cor.YELLOW}--- MODIFICAR LEGENDAS ---{Cor.RESET}\n")
+                    console.print("\n")
                     
-                    # Função rápida para desenhar o mapa em colunas perfeitamente alinhadas
-                    def exibir_mapa_colunas(nome_escala, mapa, cor_titulo):
-                        print(f"{cor_titulo}■ EQUIPE {nome_escala}:{Cor.RESET}")
-                        
-                        # 👉 NOVO PADRÃO: [A] 1S TERBECK
+                    def gerar_texto_mapa(nome_escala, mapa, cor_titulo):
+                        txt = Text()
+                        txt.append(f"■ EQUIPE {nome_escala}:\n", style=f"bold {cor_titulo}")
                         itens = [f"[{v['legenda']}] {k.split('-')[0].strip()}" for k, v in mapa.items()]
-                        
-                        # Quebra a lista e imprime de 4 em 4 colunas (espaçamento ajustado para 22)
                         for i in range(0, len(itens), 4):
                             linha = itens[i:i+4]
-                            print("   " + "".join(item.ljust(22) for item in linha))
-                        print("") # Linha em branco para respiro
+                            txt.append("   " + "".join(item.ljust(22) for item in linha) + "\n", style="white")
+                        txt.append("\n")
+                        return txt
                         
-                    # Desenha as 3 escalas na tela
-                    exibir_mapa_colunas("SMC", m_smc, Cor.CYAN)
-                    exibir_mapa_colunas("BCT", m_bct, Cor.GREEN)
-                    exibir_mapa_colunas("OEA", m_oea, Cor.ORANGE)
-
-                    print(f"{Cor.GREY}(Deixe em branco e aperte Enter para manter a legenda atual){Cor.RESET}")
+                    mapa_completo = Text()
+                    mapa_completo.append(gerar_texto_mapa("SMC", m_smc, "cyan"))
+                    mapa_completo.append(gerar_texto_mapa("BCT", m_bct, "green"))
+                    mapa_completo.append(gerar_texto_mapa("OEA", m_oea, "dark_orange"))
+                    
+                    painel_mapa = Panel(
+                        mapa_completo,
+                        title="[bold yellow]✏️ MODIFICAR LEGENDAS[/bold yellow]",
+                        border_style="yellow",
+                        padding=(1, 2)
+                    )
+                    console.print(Align.center(painel_mapa))
+                    console.print(Align.center("[dim grey](Deixe em branco e aperte Enter para manter a legenda atual)[/dim grey]\n"))
                     
                     nl_smc = input(f"Nova legenda SMC [{l_smc}]: ").strip().upper()
                     nl_bct = input(f"Nova legenda BCT [{l_bct}]: ").strip().upper()
                     nl_oea = input(f"Nova legenda OEA [{l_oea}]: ").strip().upper()
                     
-                    # Atualizando a legenda E o nome 
                     if nl_smc: 
                         l_smc = nl_smc
                         n_smc = obter_nome_pela_legenda(l_smc, m_smc)
@@ -226,7 +287,6 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
                         if opcao_escala == '1': 
                             cache[dia_s]['smc'] = leg
                         else: 
-                            # 👉 CORREÇÃO 2: Salvando o Dicionário completo para o Turbo Cache não quebrar!
                             cache[dia_s][turno_s] = {
                                 'legenda': leg,
                                 'assinatura_nome': responsavel_ass
@@ -240,7 +300,7 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
                     salvar_cache('bct', dia_str_int, turno_str, l_bct, '2')
                     salvar_cache('oea', dia_str_int, turno_str, l_oea, '3')
                     
-                    print(f"{Cor.GREEN}   ✅ Cache da Escala Cumprida alimentado com sucesso!{Cor.RESET}")
+                    console.print(Align.center("[bold green]✅ Cache da Escala Cumprida alimentado com sucesso![/bold green]"))
                     break
 
 # --- FUNÇÃO INTELIGENTE DE EXTRAÇÃO DE NOME ---
