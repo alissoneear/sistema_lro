@@ -325,10 +325,13 @@ def gerar_dashboard_boas_vindas():
         elif ".PDF" in nome: pendentes += 1 # PDF por verificar
         
     if pendentes == 0 and lros_ok > 0:
-        status_cor = Cor.GREEN
+        cor_pendencia = Cor.GREEN
+        icone_pendencia = "✅"
     elif lros_ok == 0:
-        status_cor = Cor.GREY
+        cor_pendencia = Cor.GREY
+        icone_pendencia = "➖"
     else:
-        status_cor = Cor.YELLOW
+        cor_pendencia = Cor.YELLOW
+        icone_pendencia = "⚠️"
         
-    return f"📊 {status_cor}STATUS DO MÊS ({mes}/{ano}): {lros_ok} LROs OK | {pendentes} Pendências{Cor.RESET}"
+    return f"📊 STATUS DO MÊS ({mes}/{ano}): {Cor.GREEN}{lros_ok} LROs ✅{Cor.RESET}  |  {cor_pendencia}{pendentes} Pendências {icone_pendencia}{Cor.RESET}"

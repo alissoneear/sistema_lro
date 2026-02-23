@@ -28,27 +28,73 @@ def get_sem(ano, mes, dia):
     return Config.MAPA_SEMANA[dt.weekday()]
 
 def imprimir_tabela(escala_detalhada, qtd_dias, opcao_escala, ano_longo, mes):
-    """Função auxiliar para imprimir a tabela da escala formatada."""
+    """Função auxiliar para imprimir a tabela da escala formatada com Rich."""
+    from rich.table import Table
+    from rich.console import Console
+    from rich.align import Align
+    from rich import box
+    import datetime
+    from config import Config
+    
+    console = Console()
+
     print("\n")
+    
+    especialidade_nome = "SMC" if opcao_escala == '1' else "BCT" if opcao_escala == '2' else "OEA"
+
+    tabela = Table(
+        title=f"[bold dark_orange]ESCALA CUMPRIDA {especialidade_nome} - {mes}/{ano_longo}[/bold dark_orange]",
+        header_style="bold dark_orange",
+        border_style="grey37",
+        box=box.ROUNDED,
+        show_lines=False, 
+        padding=(0, 2)    
+    )
+
+    tabela.add_column("DIAS", justify="center")
+    tabela.add_column("SEM", justify="center")
+
     if opcao_escala == '1':
-        print(f"{Cor.bg_BLUE}{Cor.WHITE} DIA | SEM |  SMC  {Cor.RESET}")
+        tabela.add_column("SMC", justify="center")
         tracos = 19
     else:
-        print(f"{Cor.bg_BLUE}{Cor.WHITE} DIA | SEM | 1º TURNO | 2º TURNO | 3º TURNO {Cor.RESET}")
-        tracos = 45
+        tabela.add_column("1ºTURNO", justify="center")
+        tabela.add_column("2ºTURNO", justify="center")
+        tabela.add_column("3ºTURNO", justify="center")
+        tracos = 50
 
     for dia in range(1, qtd_dias + 1):
         dt = datetime.date(int(ano_longo), int(mes), dia)
         sigla_sem = Config.MAPA_SEMANA[dt.weekday()]
-        if opcao_escala == '1':
-            print(f" {dia:02d}  | {sigla_sem} |  {escala_detalhada[dia]['smc']:^3}  ")
-        else:
-            l1 = escala_detalhada[dia][1]['legenda']
-            l2 = escala_detalhada[dia][2]['legenda']
-            l3 = escala_detalhada[dia][3]['legenda']
-            print(f" {dia:02d}  | {sigla_sem} |   {l1:^4}   |   {l2:^4}   |   {l3:^4}   ")
+        
+        dia_str = f"{dia:02d}"
 
-    print("-" * tracos)
+        if dt.weekday() in [5, 6]:
+            estilo_linha = "turquoise4"
+        else:
+            estilo_linha = "white"
+
+        def formatar(leg):
+            if leg in ['---', '???', 'ERR', 'PND']: 
+                return f"[red3]{leg}[/red3]"
+            return f"[{estilo_linha}]{leg}[/{estilo_linha}]"
+
+        if opcao_escala == '1':
+            tabela.add_row(
+                f"[{estilo_linha}]{dia_str}[/{estilo_linha}]",
+                f"[{estilo_linha}]{sigla_sem}[/{estilo_linha}]",
+                formatar(escala_detalhada[dia]['smc'])
+            )
+        else:
+            tabela.add_row(
+                f"[{estilo_linha}]{dia_str}[/{estilo_linha}]",
+                f"[{estilo_linha}]{sigla_sem}[/{estilo_linha}]",
+                formatar(escala_detalhada[dia][1]['legenda']),
+                formatar(escala_detalhada[dia][2]['legenda']),
+                formatar(escala_detalhada[dia][3]['legenda'])
+            )
+
+    console.print(Align.center(tabela))
     return tracos
 
 def realizar_auditoria_manual(escala_detalhada, mes, ano_curto, path_mes, opcao_escala, mapa_ativo, alertas_suspeitos=None, caminho_cache=None):
@@ -421,21 +467,36 @@ def executar():
                     print(f"{Cor.GREEN}Cache apagado. Iniciando do zero!{Cor.RESET}")
                     time.sleep(1)
 
-            print(f"\n{Cor.GREY}A processar dados e auditar inconsistências... Aguarde.{Cor.RESET}\n")
+            print(f"\n{Cor.GREY}Processando os dados e auditando as inconsistências... Aguarde.{Cor.RESET}\n")
 
             escala_detalhada = {}
             mapa_ativo = mapa_bct if opcao_escala == '2' else mapa_oea 
 
-            # NOVO: CONFIGURAÇÃO DA BARRA DE PROGRESSO
-            import sys
+          # ==========================================================
+            # NOVO: CONFIGURAÇÃO DA BARRA DE PROGRESSO FLUIDA (RICH PREMIUM)
+            # ==========================================================
+            from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn, TimeElapsedColumn, SpinnerColumn
+            
             total_passos = qtd_dias * 3
-            passo_atual = 0
-
-            def atualizar_barra(progresso, total):
-                percentual = 100 * (progresso / float(total)) if total > 0 else 100
-                barra = '█' * int(percentual / 5) + '-' * (20 - int(percentual / 5))
-                sys.stdout.write(f'\r{Cor.CYAN}Progresso: |{barra}| {percentual:.1f}% ({progresso}/{total}){Cor.RESET}')
-                sys.stdout.flush()
+            
+            progress = Progress(
+                SpinnerColumn("dots", style="bold dark_orange"), # Rodinha giratória laranja
+                TextColumn("[bold white]{task.description}"),    # Texto "A extrair dados..." em branco
+                BarColumn(
+                    bar_width=45, 
+                    style="grey37",                      # Cor da barra vazia (cinza escuro)
+                    complete_style="bold dark_orange"    # Cor da barra cheia (laranja)
+                ),
+                TaskProgressColumn(text_format="[bold cyan]{task.percentage:>3.0f}%"), # Porcentagem em ciano
+                TextColumn("[dim grey]•[/dim grey]"),
+                TimeElapsedColumn(),                     # Tempo percorrido
+                TextColumn("[dim grey]• ETA:[/dim grey]"),
+                TimeRemainingColumn()                    # Tempo restante
+            )
+            tarefa_extracao = progress.add_task("Extraindo dados...", total=total_passos)
+            
+            progress.start() # Inicia a barra na tela
+            # ==========================================================
 
             # Extração de Dados
             for dia in range(1, qtd_dias + 1):
@@ -447,10 +508,9 @@ def executar():
                              'meta': {1:{'assinatura_nome':'???'}, 2:{'assinatura_nome':'???'}, 3:{'assinatura_nome':'???'}}}
 
                 for turno in [1, 2, 3]:
-                    passo_atual += 1
-                    atualizar_barra(passo_atual, total_passos)
-                    
+                    progress.update(tarefa_extracao, advance=1)
                     usou_cache = False
+
                     dia_str, turno_str = str(dia), str(turno)
                     
                     if cache_dados and dia_str in cache_dados and turno_str in cache_dados[dia_str]:
@@ -498,8 +558,8 @@ def executar():
                     escala_detalhada[dia][t] = {'legenda': leg, 'assinatura_nome': dia_dados['meta'][t]['assinatura_nome']}
                     if opcao_escala == '1': escala_detalhada[dia]['smc'] = dia_dados['smc']
             
-            # Quando a barra termina, precisamos quebrar a linha para não encavalar os textos:
-            print("\n")
+            progress.stop() # Finaliza a animação da barra do Rich
+            print("\n") # <- FIM DA BARRA DE PROGRESSO AQUI
 
             # SALVA O ESTADO INICIAL NO CACHE
             if caminho_cache:
