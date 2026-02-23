@@ -2,8 +2,8 @@ import os
 
 class Config:
     if os.name == 'nt':
-        #CAMINHO_RAIZ = r"R:\DO\COI\ARCC-CW\14 - LRO" #Prod
-        CAMINHO_RAIZ = r"E:\dev\sistema_lro\ARQUIVOS" #Windows-Dev
+        CAMINHO_RAIZ = r"R:\DO\COI\ARCC-CW\14 - LRO" #Prod
+        #CAMINHO_RAIZ = r"E:\dev\sistema_lro\ARQUIVOS" #Windows-Dev
     else:
         CAMINHO_RAIZ = "/Users/alissonlourenco/Dev/sistema_lro/ARQUIVOS" #Mac
     
