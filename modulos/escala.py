@@ -28,31 +28,85 @@ def get_sem(ano, mes, dia):
     return Config.MAPA_SEMANA[dt.weekday()]
 
 def imprimir_tabela(escala_detalhada, qtd_dias, opcao_escala, ano_longo, mes):
-    """Função auxiliar para imprimir a tabela da escala formatada."""
+    """Função auxiliar para imprimir a tabela da escala formatada com Rich."""
+    from rich.table import Table
+    from rich.console import Console
+    from rich.align import Align
+    from rich import box
+    import datetime
+    from config import Config
+    
+    console = Console()
+
     print("\n")
+    
+    especialidade_nome = "SMC" if opcao_escala == '1' else "BCT" if opcao_escala == '2' else "OEA"
+
+    tabela = Table(
+        title=f"[bold dark_orange]ESCALA CUMPRIDA {especialidade_nome} - {mes}/{ano_longo}[/bold dark_orange]",
+        header_style="bold dark_orange",
+        border_style="grey37",
+        box=box.ROUNDED,
+        show_lines=False, 
+        padding=(0, 2)    
+    )
+
+    tabela.add_column("DIAS", justify="center")
+    tabela.add_column("SEM", justify="center")
+
     if opcao_escala == '1':
-        print(f"{Cor.bg_BLUE}{Cor.WHITE} DIA | SEM |  SMC  {Cor.RESET}")
+        tabela.add_column("SMC", justify="center")
         tracos = 19
     else:
-        print(f"{Cor.bg_BLUE}{Cor.WHITE} DIA | SEM | 1º TURNO | 2º TURNO | 3º TURNO {Cor.RESET}")
-        tracos = 45
+        tabela.add_column("1ºTURNO", justify="center")
+        tabela.add_column("2ºTURNO", justify="center")
+        tabela.add_column("3ºTURNO", justify="center")
+        tracos = 50
 
     for dia in range(1, qtd_dias + 1):
         dt = datetime.date(int(ano_longo), int(mes), dia)
         sigla_sem = Config.MAPA_SEMANA[dt.weekday()]
-        if opcao_escala == '1':
-            print(f" {dia:02d}  | {sigla_sem} |  {escala_detalhada[dia]['smc']:^3}  ")
-        else:
-            l1 = escala_detalhada[dia][1]['legenda']
-            l2 = escala_detalhada[dia][2]['legenda']
-            l3 = escala_detalhada[dia][3]['legenda']
-            print(f" {dia:02d}  | {sigla_sem} |   {l1:^4}   |   {l2:^4}   |   {l3:^4}   ")
+        
+        dia_str = f"{dia:02d}"
 
-    print("-" * tracos)
+        if dt.weekday() in [5, 6]:
+            estilo_linha = "turquoise4"
+        else:
+            estilo_linha = "white"
+
+        def formatar(leg):
+            if leg in ['---', '???', 'ERR', 'PND']: 
+                return f"[red3]{leg}[/red3]"
+            return f"[{estilo_linha}]{leg}[/{estilo_linha}]"
+
+        if opcao_escala == '1':
+            tabela.add_row(
+                f"[{estilo_linha}]{dia_str}[/{estilo_linha}]",
+                f"[{estilo_linha}]{sigla_sem}[/{estilo_linha}]",
+                formatar(escala_detalhada[dia]['smc'])
+            )
+        else:
+            tabela.add_row(
+                f"[{estilo_linha}]{dia_str}[/{estilo_linha}]",
+                f"[{estilo_linha}]{sigla_sem}[/{estilo_linha}]",
+                formatar(escala_detalhada[dia][1]['legenda']),
+                formatar(escala_detalhada[dia][2]['legenda']),
+                formatar(escala_detalhada[dia][3]['legenda'])
+            )
+
+    console.print(Align.center(tabela))
     return tracos
 
 def realizar_auditoria_manual(escala_detalhada, mes, ano_curto, path_mes, opcao_escala, mapa_ativo, alertas_suspeitos=None, caminho_cache=None):
     """Procura falhas na extração OU alertas da auditoria e abre o PDF exibindo os motivos."""
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.align import Align
+    from rich.text import Text
+    import os
+    
+    console = Console()
+
     if alertas_suspeitos is None: alertas_suspeitos = {}
     pendentes = []
     dias = sorted(escala_detalhada.keys())
@@ -84,44 +138,82 @@ def realizar_auditoria_manual(escala_detalhada, mes, ano_curto, path_mes, opcao_
     if not pendentes:
         return False 
         
-    print(f"\n{Cor.YELLOW}⚠️ Foram detetados {len(pendentes)} turnos pendentes de revisão.{Cor.RESET}")
-    if not utils.pedir_confirmacao(f"{Cor.CYAN}>> Deseja realizar a AUDITORIA MANUAL agora? (S/Enter p/ Sim, ESC p/ Pular): {Cor.RESET}"):
+    # ========================================================
+    # 1. PAINEL DE INÍCIO DA AUDITORIA
+    # ========================================================
+    console.print("\n")
+    painel_auditoria = Panel(
+        f"[bold white]Existem [dark_orange]{len(pendentes)}[/dark_orange] turnos pendentes de revisão.[/bold white]",
+        title="[bold dark_orange]🔎 INICIAR AUDITORIA MANUAL[/bold dark_orange]",
+        border_style="dark_orange",
+        padding=(1, 2),
+        width=75
+    )
+    console.print(Align.center(painel_auditoria))
+    console.print()
+
+    import utils
+    if not utils.pedir_confirmacao(f" " * 5 + f">> Deseja realizar a AUDITORIA MANUAL agora? (S/Enter p/ Sim, ESC p/ Pular): "):
         return False
         
     validas = [dados['legenda'] for dados in mapa_ativo.values()]
     
-    # CRIAÇÃO DO MENU VISUAL DE LEGENDAS (Cheat Sheet)
-    itens_ordenados = sorted(mapa_ativo.items(), key=lambda x: x[1]['legenda'])
-    linhas_menu = []
-    linha_atual = []
-    
-    for nome_guerra, dados in itens_ordenados:
-        linha_atual.append(f"[{dados['legenda']}] {nome_guerra}")
-        if len(linha_atual) == 4:
-            linhas_menu.append("  ".join(f"{item:<22}" for item in linha_atual))
-            linha_atual = []
-            
-    if linha_atual:
-        linhas_menu.append("  ".join(f"{item:<22}" for item in linha_atual))
+    # ========================================================
+    # 2. CRIAÇÃO DO MAPA VISUAL DE LEGENDAS (Padrão Rich)
+    # ========================================================
+    nome_escala = "SMC" if opcao_escala == '1' else "BCT" if opcao_escala == '2' else "OEA"
+    cor_titulo = "cyan" if opcao_escala == '1' else "green" if opcao_escala == '2' else "dark_orange"
+
+    def gerar_texto_mapa(nome_esc, mapa, cor):
+        txt = Text()
+        txt.append(f"■ EQUIPE {nome_esc}:\n", style=f"bold {cor}")
+        itens = [f"[{v['legenda']}] {k.split('-')[0].strip()}" for k, v in mapa.items()]
         
-    mapa_visual = "\n".join(linhas_menu)
+        linhas = []
+        for i in range(0, len(itens), 4):
+            linha = itens[i:i+4]
+            linhas.append("   " + "".join(item.ljust(22) for item in linha))
+            
+        txt.append("\n".join(linhas), style="white")
+        return txt
+
+    mapa_visual_text = gerar_texto_mapa(nome_escala, mapa_ativo, cor_titulo)
+    painel_mapa = Panel(
+        mapa_visual_text,
+        title="[bold yellow]✏️ MAPA DE LEGENDAS[/bold yellow]",
+        border_style="yellow",
+        padding=(1, 2)
+    )
     
     modificado = False
+    
+    MESES_NOME = {
+        "01": "janeiro", "02": "fevereiro", "03": "março",
+        "04": "abril", "05": "maio", "06": "junho",
+        "07": "julho", "08": "agosto", "09": "setembro",
+        "10": "outubro", "11": "novembro", "12": "dezembro"
+    }
     
     for dia, t, leg_atual, motivos in pendentes:
         dia_fmt = f"{dia:02d}"
         data_str = f"{dia_fmt}{mes}{ano_curto}"
+        mes_limpo = MESES_NOME.get(mes, "mês")
         
-        # Cabeçalho da auditoria focado no turno e nos motivos
+        # ========================================================
+        # 3. RÉGUA SEPARADORA E MOTIVOS DE AUDITORIA
+        # ========================================================
+        console.print("\n")
         if opcao_escala == '1':
-            print(f"\n{Cor.bg_BLUE}{Cor.WHITE} Auditando: Dia {dia_fmt} - SMC {Cor.RESET}")
+            console.rule(f"[bold deep_sky_blue1]▶ Auditando: Dia {dia_fmt} de {mes_limpo} - SMC [/bold deep_sky_blue1]", style="deep_sky_blue1")
             arquivos = utils.buscar_arquivos_flexivel(path_mes, data_str, 1) 
         else:
-            print(f"\n{Cor.bg_BLUE}{Cor.WHITE} Auditando: Dia {dia_fmt} - {t}º Turno {Cor.RESET}")
+            console.rule(f"[bold deep_sky_blue1]▶ Auditando: Dia {dia_fmt} de {mes_limpo} - {t}º Turno [/bold deep_sky_blue1]", style="deep_sky_blue1")
             arquivos = utils.buscar_arquivos_flexivel(path_mes, data_str, t)
             
+        console.print()
         for m in motivos:
-            print(f"{Cor.YELLOW} ↳ Motivo:{Cor.RESET} {m}")
+            console.print(Align.center(f"[bold red]📌 MOTIVO:[/bold red] [white]{m}[/white]"))
+        console.print()
             
         pdfs = [f for f in arquivos if f.lower().endswith('.pdf')]
         arquivo_alvo = None
@@ -130,17 +222,20 @@ def realizar_auditoria_manual(escala_detalhada, mes, ano_curto, path_mes, opcao_
             arquivo_alvo = ok_files[0] if ok_files else pdfs[0]
             
         if arquivo_alvo:
-            print(f"{Cor.GREY}A abrir o documento: {os.path.basename(arquivo_alvo)}{Cor.RESET}")
+            from config import Cor
+            console.print(Align.center(f"[dim grey]Abrindo o documento: {os.path.basename(arquivo_alvo)}...[/dim grey]"))
             utils.abrir_arquivo(arquivo_alvo)
         else:
-            print(f"{Cor.RED}[!] Nenhum PDF encontrado para este turno.{Cor.RESET}")
+            console.print(Align.center("[bold red][!] Nenhum PDF encontrado para este turno.[/bold red]"))
             
-        # 👇 AQUI EXIBIMOS O MAPA ANTES DE PEDIR O INPUT 👇
-        print(f"\n{Cor.CYAN}--- MAPA DE LEGENDAS DO MÊS ---{Cor.RESET}")
-        print(mapa_visual)
-        print(f"{Cor.CYAN}-------------------------------{Cor.RESET}")
+        # ========================================================
+        # 4. EXIBIÇÃO DO MAPA E INPUT DO UTILIZADOR
+        # ========================================================
+        console.print("\n")
+        console.print(Align.center(painel_mapa))
+        console.print(Align.center("[dim grey](Deixe em branco e aperte Enter para manter a legenda atual)[/dim grey]\n"))
         
-        nova_leg = input(f"Digite a legenda correspondente ou Enter p/ manter [{leg_atual}]: ").strip().upper()
+        nova_leg = input(f"   Digite a nova legenda ou Enter p/ manter [{leg_atual}]: ").strip().upper()
         
         if nova_leg:
             if nova_leg in validas:
@@ -149,7 +244,7 @@ def realizar_auditoria_manual(escala_detalhada, mes, ano_curto, path_mes, opcao_
                 else:
                     escala_detalhada[dia][t]['legenda'] = nova_leg
                 modificado = True
-                print(f"{Cor.GREEN}✅ Legenda atualizada para: {nova_leg}{Cor.RESET}")
+                console.print(f"\n[bold green]   ✅ Legenda atualizada para: {nova_leg}[/bold green]")
 
                 # SALVAMENTO AUTOMÁTICO NO CACHE
                 if caminho_cache:
@@ -158,15 +253,15 @@ def realizar_auditoria_manual(escala_detalhada, mes, ano_curto, path_mes, opcao_
                         with open(caminho_cache, 'w', encoding='utf-8') as f: json.dump(escala_detalhada, f, indent=4)
                     except: pass
             else:
-                print(f"{Cor.RED}⚠️ Legenda '{nova_leg}' inválida. A manter '{leg_atual}'.{Cor.RESET}")
+                console.print(f"\n[bold red]   ⚠️ Legenda '{nova_leg}' inválida. A manter '{leg_atual}'.[/bold red]")
         else:
-            print(f"{Cor.GREY}Mantido: {leg_atual}{Cor.RESET}")
+            console.print(f"\n[dim grey]   Mantido: {leg_atual}[/dim grey]")
             
     return modificado
 
 def verificar_e_propor_correcoes(escala_detalhada, mapa_efetivo, ano, mes):
     inconsistencias = [] 
-    correcoes = []       
+    correcoes = []       # Não usaremos mais auto-correção, deixaremos a lista vazia
     alertas_manuais = {} # Dicionário: (dia, turno) -> [motivos]
     dias = sorted(escala_detalhada.keys())
     ignorar = ['---', '???', 'PND', 'ERR']
@@ -187,26 +282,20 @@ def verificar_e_propor_correcoes(escala_detalhada, mapa_efetivo, ano, mes):
         
         # --- REGRA 1: DOBRA DE TURNO ---
         violacao = None
-        turno_suspeito = None
-        if l1 not in ignorar and l1 == l2: violacao = (1, 2, l1); turno_suspeito = 2
-        elif l2 not in ignorar and l2 == l3: violacao = (2, 3, l2); turno_suspeito = 3
+        if l1 not in ignorar and l1 == l2: violacao = (1, 2, l1)
+        elif l2 not in ignorar and l2 == l3: violacao = (2, 3, l2)
 
         if violacao:
             t_a, t_b, leg = violacao
             nome_mil = obter_info_militar(leg, mapa_efetivo)
-            leg_ass = obter_legenda_pelo_nome(dados_dia[turno_suspeito]['assinatura_nome'])
             
             # Motivos para a revisão visual
             motivo_dobra = f"Possível dobra de turno detetada ({t_a}º e {t_b}º) do militar {nome_mil} ({leg})."
             add_alerta(dia, t_a, motivo_dobra)
             add_alerta(dia, t_b, motivo_dobra)
             
-            if leg_ass not in ['---', '???'] and leg_ass != leg:
-                nome_correto = obter_info_militar(leg_ass, mapa_efetivo)
-                inconsistencias.append(f"⚠️ Dia {dia:02d} ({dia_sem}): Militar {nome_mil} ({leg}) em turnos seguidos ({t_a}º/{t_b}º).\n      ↳ 🕵️‍♂️ {Cor.GREEN}SOLUÇÃO:{Cor.RESET} O {t_b}ºT foi assinado por {nome_correto} ({leg_ass}). Erro de digitação.")
-                correcoes.append({'dia': dia, 'turno': turno_suspeito, 'nova_leg': leg_ass})
-            else:
-                inconsistencias.append(f"⚠️ Dia {dia:02d} ({dia_sem}): Militar {nome_mil} ({leg}) dobrou o turno ({t_a}º e {t_b}º).\n      ↳ ⚖️ {Cor.YELLOW}INFO:{Cor.RESET} Assinaturas confirmam que o militar cumpriu ambos os turnos.")
+            # Apenas relata o problema (Sem tentar adivinhar a solução)
+            inconsistencias.append(f"Dia {dia:02d} ({dia_sem}): Militar {nome_mil} ({leg}) dobrou o turno ({t_a}º e {t_b}º).")
 
         # --- REGRA 2: FOLGA PÓS-3º TURNO ---
         if i > 0:
@@ -218,30 +307,16 @@ def verificar_e_propor_correcoes(escala_detalhada, mapa_efetivo, ano, mes):
                 turnos_hoje_violados = [t for t in [1, 2, 3] if escala_detalhada[dia][t]['legenda'] == l3_ant]
                 if turnos_hoje_violados:
                     nome_mil = obter_info_militar(l3_ant, mapa_efetivo)
-                    pistas = []
-                    violation_real = True 
 
                     for t_hoje in turnos_hoje_violados:
-                        # Adiciona o alerta para quem está a falhar a folga hoje e quem tirou o T3 ontem
                         motivo_folga_hoje = f"Falta de folga regulamentar. O militar {nome_mil} ({l3_ant}) estava escalado no 3º Turno do dia {dia_ant:02d}."
                         motivo_folga_ontem = f"Militar {nome_mil} ({l3_ant}) escalado aqui, mas aparece sem folga no {t_hoje}º Turno do dia seguinte ({dia:02d})."
                         
                         add_alerta(dia, t_hoje, motivo_folga_hoje)
                         add_alerta(dia_ant, 3, motivo_folga_ontem)
 
-                        leg_ass_hoje = obter_legenda_pelo_nome(escala_detalhada[dia][t_hoje]['assinatura_nome'])
-                        if leg_ass_hoje not in ['---', '???'] and leg_ass_hoje != l3_ant:
-                            nome_correto = obter_info_militar(leg_ass_hoje, mapa_efetivo)
-                            pistas.append(f"O LRO do dia {dia:02d} ({t_hoje}ºT) foi assinado por {nome_correto} ({leg_ass_hoje}).")
-                            correcoes.append({'dia': dia, 'turno': t_hoje, 'nova_leg': leg_ass_hoje})
-                            violation_real = False
-
-                    msg_auditoria = ""
-                    if pistas: msg_auditoria = f"\n      ↳ 🕵️‍♂️ {Cor.GREEN}SOLUÇÃO:{Cor.RESET} " + " ".join(pistas) + " Provável erro de digitação."
-                    elif violation_real: msg_auditoria = f"\n      ↳ ⚖️ {Cor.YELLOW}INFO:{Cor.RESET} Assinaturas confirmam que {nome_mil} cumpriu o serviço sem a folga regulamentar."
-
-                    str_turnos = " e ".join([f"{t}º" for t in turnos_hoje_violados])
-                    inconsistencias.append(f"🚨 Dia {dia:02d} ({dia_sem}): Militar {nome_mil} ({l3_ant}) sem folga do dia {dia_ant:02d} ({dia_sem_ant}).{msg_auditoria}")
+                    # Apenas relata o problema
+                    inconsistencias.append(f"Dia {dia:02d} ({dia_sem}): Militar {nome_mil} ({l3_ant}) sem folga do dia {dia_ant:02d} ({dia_sem_ant}).")
                     
     return inconsistencias, correcoes, alertas_manuais
 
@@ -353,6 +428,19 @@ def gerar_pdf_escala(escala_detalhada, mapa_ativo, opcao_escala, mes, ano_longo)
         print(f"{Cor.RED}[!] Erro ao gravar o ficheiro PDF: {e}{Cor.RESET}")
 
 def executar():
+    import os
+    import sys
+    import time
+    import datetime
+    import calendar
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.align import Align
+    from rich.text import Text
+    from rich.prompt import Prompt
+    
+    console = Console()
+
     if os.name == 'nt' and not os.path.exists(Config.CAMINHO_RAIZ):
         input(f"{Cor.RED}[ERRO CRÍTICO] Caminho {Config.CAMINHO_RAIZ} não encontrado.{Cor.RESET}")
         return
@@ -362,11 +450,21 @@ def executar():
         agora = datetime.datetime.now()
         mes_atual, ano_atual_curto = agora.strftime("%m"), agora.strftime("%y")
 
-        print(f"{Cor.ORANGE}=== SISTEMA LRO - Escala Cumprida ==={Cor.RESET}")
-        
-        inp_mes = input(f"MÊS (Enter para {mes_atual}): ")
+        # ========================================================
+        # 1. PAINEL DE TÍTULO DO MÓDULO
+        # ========================================================
+        titulo = Text("SISTEMA LRO\nGerador de Escala Cumprida e Auditoria", justify="center", style="bold dark_orange")
+        painel_titulo = Panel(titulo, border_style="dark_orange", padding=(1, 2), width=65)
+        console.print(Align.center(painel_titulo))
+        console.print("\n")
+
+        # ========================================================
+        # 2. INPUT DE MÊS E ANO (Modernizado)
+        # ========================================================
+        inp_mes = console.input(" " * 18 + f"[bold dark_orange]MÊS[/bold dark_orange] [dim white](Enter para {mes_atual}):[/dim white] ").strip()
         mes = inp_mes.zfill(2) if inp_mes else mes_atual
-        inp_ano = input(f"ANO (Enter para {ano_atual_curto}): ")
+        
+        inp_ano = console.input(" " * 18 + f"[bold dark_orange]ANO[/bold dark_orange] [dim white](Enter para {ano_atual_curto}):[/dim white] ").strip()
         ano_curto = inp_ano if inp_ano else ano_atual_curto
         ano_longo = "20" + ano_curto
 
@@ -374,13 +472,36 @@ def executar():
 
         while True:
             utils.limpar_tela()
-            print(f"{Cor.ORANGE}=== SISTEMA LRO - Escala Cumprida ({mes}/{ano_curto}) ==={Cor.RESET}")
-            print(f"\n{Cor.CYAN}Qual escala deseja gerar?{Cor.RESET}")
-            print("  [1] SMC")
-            print("  [2] BCT")
-            print("  [3] OEA")
-            print("  [0] Voltar ao Menu")
-            opcao_escala = input("\nOpção: ")
+            
+            titulo_menu = Text(f"PERÍODO SELECIONADO: {mes}/{ano_longo}", justify="center", style="bold white on dark_orange")
+            console.print(Align.center(Panel(titulo_menu, border_style="dark_orange", width=65)))
+            console.print("\n")
+            
+            # ========================================================
+            # 3. MENU DE ESPECIALIDADES EM PAINEL
+            # ========================================================
+            menu_opcoes = Text()
+            menu_opcoes.append("  [1] ", style="bold dark_orange")
+            menu_opcoes.append("Escala Cumprida - SMC\n")
+            menu_opcoes.append("  [2] ", style="bold dark_orange")
+            menu_opcoes.append("Escala Cumprida - BCT\n")
+            menu_opcoes.append("  [3] ", style="bold dark_orange")
+            menu_opcoes.append("Escala Cumprida - OEA\n\n")
+            menu_opcoes.append("  [0] ", style="bold red")
+            menu_opcoes.append("Voltar ao Menu Principal")
+
+            painel_menu = Panel(
+                menu_opcoes, 
+                border_style="dim white", 
+                title="[bold white]Selecione a Especialidade[/bold white]", 
+                title_align="left",
+                width=65,
+                padding=(1, 2)
+            )
+            console.print(Align.center(painel_menu))
+            console.print()
+
+            opcao_escala = Prompt.ask(" " * 22 + "[bold white]Opção desejada[/bold white]", choices=["0", "1", "2", "3"])
             
             if opcao_escala == '0': return 
             if opcao_escala not in ['1', '2', '3']: continue
@@ -389,7 +510,7 @@ def executar():
             path_mes = os.path.join(path_ano, Config.MAPA_PASTAS.get(mes, "X"))
             
             if not os.path.exists(path_mes):
-                print(f"{Cor.RED}Pasta não encontrada.{Cor.RESET}")
+                console.print(Align.center(Panel(f"[bold red]Pasta não encontrada para o período {mes}/{ano_longo}.[/bold red]", border_style="red")))
                 time.sleep(2)
                 break
 
@@ -397,7 +518,9 @@ def executar():
             except: break
             if mes == mes_atual and ano_curto == ano_atual_curto: qtd_dias = agora.day
 
-            # DETEÇÃO DO CACHE E PERGUNTA AO USUÁRIO
+            # ========================================================
+            # 4. DETEÇÃO DO CACHE E PERGUNTA AO USUÁRIO
+            # ========================================================
             import json
             especialidade_nome = 'smc' if opcao_escala == '1' else 'bct' if opcao_escala == '2' else 'oea'
             caminho_cache = os.path.join(path_mes, f".cache_escala_{especialidade_nome}.json")
@@ -405,9 +528,20 @@ def executar():
             
             if os.path.exists(caminho_cache):
                 utils.limpar_tela()
-                print(f"{Cor.ORANGE}=== SISTEMA LRO - Escala Cumprida ({mes}/{ano_curto}) ==={Cor.RESET}")
-                print(f"\n{Cor.YELLOW}💾 PROGRESSO SALVO DETETADO!{Cor.RESET}")
-                print(f"{Cor.GREY}Encontramos auditorias manuais feitas anteriormente para a escala de {especialidade_nome.upper()}.{Cor.RESET}\n")
+                
+                alerta_cache = Text()
+                alerta_cache.append(f"Encontramos auditorias manuais feitas anteriormente para a escala de {especialidade_nome.upper()}.\n\n", style="dim white")
+                alerta_cache.append("Como deseja prosseguir com a geração da tabela?", style="bold yellow")
+                
+                painel_cache = Panel(
+                    alerta_cache,
+                    title="[bold yellow]💾 PROGRESSO SALVO DETETADO![/bold yellow]",
+                    border_style="yellow",
+                    padding=(1, 2),
+                    width=65
+                )
+                console.print(Align.center(painel_cache))
+                console.print("\n")
                 
                 if utils.pedir_confirmacao(f"{Cor.CYAN}>> Deseja RETOMAR de onde parou? (S/Enter p/ Sim, ESC p/ Reiniciar do zero): {Cor.RESET}"):
                     try:
@@ -421,21 +555,49 @@ def executar():
                     print(f"{Cor.GREEN}Cache apagado. Iniciando do zero!{Cor.RESET}")
                     time.sleep(1)
 
-            print(f"\n{Cor.GREY}A processar dados e auditar inconsistências... Aguarde.{Cor.RESET}\n")
+            print(f"\n{Cor.GREY}Processando os dados e auditando as inconsistências... Aguarde.{Cor.RESET}\n")
 
             escala_detalhada = {}
             mapa_ativo = mapa_bct if opcao_escala == '2' else mapa_oea 
 
-            # NOVO: CONFIGURAÇÃO DA BARRA DE PROGRESSO
-            import sys
-            total_passos = qtd_dias * 3
-            passo_atual = 0
+            # CONFIGURAÇÃO DA BARRA DE PROGRESSO FLUIDA (RICH PREMIUM)
+            from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, SpinnerColumn, ProgressColumn
+            from rich.text import Text
 
-            def atualizar_barra(progresso, total):
-                percentual = 100 * (progresso / float(total)) if total > 0 else 100
-                barra = '█' * int(percentual / 5) + '-' * (20 - int(percentual / 5))
-                sys.stdout.write(f'\r{Cor.CYAN}Progresso: |{barra}| {percentual:.1f}% ({progresso}/{total}){Cor.RESET}')
-                sys.stdout.flush()
+            # Criando medidores de tempo 100% customizados e em português!
+            class TempoDecorridoBR(ProgressColumn):
+                def render(self, task):
+                    elapsed = task.elapsed
+                    if elapsed is None: return Text("0 seg", style="bold yellow")
+                    mins, secs = divmod(int(elapsed), 60)
+                    return Text(f"{mins} min {secs} seg" if mins > 0 else f"{secs} seg", style="bold yellow")
+
+            class TempoRestanteBR(ProgressColumn):
+                def render(self, task):
+                    remaining = task.time_remaining
+                    if remaining is None: return Text("--", style="bold deep_sky_blue1")
+                    mins, secs = divmod(int(remaining), 60)
+                    return Text(f"{mins} min {secs} seg" if mins > 0 else f"{secs} seg", style="bold deep_sky_blue1")
+
+            total_passos = qtd_dias * 3
+            
+            progress = Progress(
+                SpinnerColumn("dots", style="bold dark_orange"),
+                TextColumn("[bold white]{task.description}"),
+                BarColumn(
+                    bar_width=30, # Deixei a barra um pouco mais compacta para caber os textos novos
+                    style="grey37",                      
+                    complete_style="bold dark_orange"    
+                ),
+                TaskProgressColumn(text_format="[bold cyan]{task.percentage:>3.0f}%"), 
+                TextColumn("[dim grey]• Decorrido:[/dim grey]"),
+                TempoDecorridoBR(),                      # 👈 Nossa coluna customizada!
+                TextColumn("[dim grey]• Restante:[/dim grey]"),
+                TempoRestanteBR()                        # 👈 Nossa coluna customizada!
+            )
+            tarefa_extracao = progress.add_task("Extraindo dados...", total=total_passos)
+            
+            progress.start()
 
             # Extração de Dados
             for dia in range(1, qtd_dias + 1):
@@ -447,10 +609,9 @@ def executar():
                              'meta': {1:{'assinatura_nome':'???'}, 2:{'assinatura_nome':'???'}, 3:{'assinatura_nome':'???'}}}
 
                 for turno in [1, 2, 3]:
-                    passo_atual += 1
-                    atualizar_barra(passo_atual, total_passos)
-                    
+                    progress.update(tarefa_extracao, advance=1)
                     usou_cache = False
+
                     dia_str, turno_str = str(dia), str(turno)
                     
                     if cache_dados and dia_str in cache_dados and turno_str in cache_dados[dia_str]:
@@ -498,8 +659,8 @@ def executar():
                     escala_detalhada[dia][t] = {'legenda': leg, 'assinatura_nome': dia_dados['meta'][t]['assinatura_nome']}
                     if opcao_escala == '1': escala_detalhada[dia]['smc'] = dia_dados['smc']
             
-            # Quando a barra termina, precisamos quebrar a linha para não encavalar os textos:
-            print("\n")
+            progress.stop() # Finaliza a animação da barra do Rich
+            print("\n") # <- FIM DA BARRA DE PROGRESSO AQUI
 
             # SALVA O ESTADO INICIAL NO CACHE
             if caminho_cache:
@@ -508,16 +669,41 @@ def executar():
                     with open(caminho_cache, 'w', encoding='utf-8') as f: json.dump(escala_detalhada, f, indent=4)
                 except: pass
 
-            # --- 1. ANÁLISE PRÉVIA E PRIMEIRA EXIBIÇÃO ---
+            # --- 1. ALERTA DE SEGURANÇA OPERACIONAL (RADAR) COM RICH ---
             if opcao_escala in ['2', '3']:
-                inconsistencias, correcoes, _ = verificar_e_propor_correcoes(escala_detalhada, mapa_ativo, ano_longo, mes)
+                inconsistencias, _, _ = verificar_e_propor_correcoes(escala_detalhada, mapa_ativo, ano_longo, mes)
+                
+                from rich.panel import Panel
+                from rich.text import Text
+                from rich.align import Align
+                from rich.console import Console
+                console_rich = Console()
+                
                 if inconsistencias:
-                    print(f"\n{Cor.bg_BLUE}{Cor.WHITE} 🔍 ANÁLISE PRÉVIA DE CONSISTÊNCIA {Cor.RESET}")
-                    for inc in inconsistencias: print(f"{Cor.RED}{inc}{Cor.RESET}")
-                    if correcoes and utils.pedir_confirmacao(f"\n{Cor.YELLOW}>> Aplicar correções de digitação na tabela? (S/Enter p/ Sim, ESC p/ Não): {Cor.RESET}"):
-                        for c in correcoes: escala_detalhada[c['dia']][c['turno']]['legenda'] = c['nova_leg']
-
-            tracos = imprimir_tabela(escala_detalhada, qtd_dias, opcao_escala, ano_longo, mes)
+                    texto_alerta = Text()
+                    for inc in inconsistencias: 
+                        if "sem folga" in inc:
+                            texto_alerta.append(f" {inc}\n", style="bold red")
+                        elif "dobrou" in inc:
+                            texto_alerta.append(f" {inc}\n", style="bold yellow")
+                            
+                    texto_alerta.append("\nℹ️  Nota: O sistema identificou quebra de descanso. Recomendada revisão na Auditoria Manual.", style="dim white")
+                    
+                    painel = Panel(
+                        texto_alerta, 
+                        title="[bold white on red] 🚨 ANÁLISE PRÉVIA DE CONSISTÊNCIA [/bold white on red]", 
+                        border_style="red", 
+                        padding=(1, 2)
+                    )
+                    console_rich.print(Align.center(painel))
+                else:
+                    painel = Panel(
+                        "[bold green]✅ Nenhuma quebra de descanso (folga/dobra) identificada na escala.[/bold green]", 
+                        title="[bold green] 🔍 ANÁLISE PRÉVIA DE CONSISTÊNCIA [/bold green]", 
+                        border_style="green", 
+                        padding=(1, 2)
+                    )
+                    console_rich.print(Align.center(painel))
 
             # --- 2. LOOP DE AUDITORIA MANUAL INFINITO ---
             while True:
@@ -537,14 +723,37 @@ def executar():
                 else:
                     break
 
-            # --- 3. RESUMO FINAL E GERAÇÃO DO PDF ---
+            # --- 3. RESUMO FINAL E GERAÇÃO DO PDF COM RICH ---
             if opcao_escala in ['2', '3']:
                 inc_final, _, _ = verificar_e_propor_correcoes(escala_detalhada, mapa_ativo, ano_longo, mes)
-                print("\n" + f"{Cor.bg_ORANGE}{Cor.WHITE} RESUMO DA AUDITORIA OPERACIONAL {Cor.RESET}".center(tracos + 10))
+                
+                from rich.panel import Panel
+                from rich.text import Text
+                from rich.align import Align
+                from rich.console import Console
+                console_rich = Console()
+                
+                print("\n")
                 if inc_final:
-                    for inc in inc_final: print(f"{Cor.RED}{inc}{Cor.RESET}")
-                else: print(f"{Cor.GREEN}✅ Escala consistente com as normas de folga.{Cor.RESET}")
-                print("-" * tracos)
+                    texto_final = Text()
+                    for inc in inc_final: 
+                        texto_final.append(f" {inc}\n", style="bold red")
+                        
+                    painel_final = Panel(
+                        texto_final, 
+                        title="[bold red]RESUMO DA AUDITORIA OPERACIONAL[/bold red]", 
+                        border_style="red", 
+                        padding=(1, 2)
+                    )
+                else:
+                    painel_final = Panel(
+                        "[bold green]✅ Escala validada e consistente com as normas de folga.[/bold green]", 
+                        title="[bold green]RESUMO DA AUDITORIA OPERACIONAL[/bold green]",
+                        border_style="green", 
+                        padding=(1, 2)
+                    )
+                    
+                console_rich.print(Align.center(painel_final))
                 
                 if utils.pedir_confirmacao(f"\n{Cor.CYAN}>> Deseja GERAR O PDF OFICIAL desta Escala Cumprida? (S/Enter p/ Sim, ESC p/ Pular): {Cor.RESET}"):
                     gerar_pdf_escala(escala_detalhada, mapa_ativo, opcao_escala, mes, ano_longo)
