@@ -379,6 +379,19 @@ def gerar_pdf_escala(escala_detalhada, mapa_ativo, opcao_escala, mes, ano_longo)
         print(f"{Cor.RED}[!] Erro ao gravar o ficheiro PDF: {e}{Cor.RESET}")
 
 def executar():
+    import os
+    import sys
+    import time
+    import datetime
+    import calendar
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.align import Align
+    from rich.text import Text
+    from rich.prompt import Prompt
+    
+    console = Console()
+
     if os.name == 'nt' and not os.path.exists(Config.CAMINHO_RAIZ):
         input(f"{Cor.RED}[ERRO CRÍTICO] Caminho {Config.CAMINHO_RAIZ} não encontrado.{Cor.RESET}")
         return
@@ -388,11 +401,21 @@ def executar():
         agora = datetime.datetime.now()
         mes_atual, ano_atual_curto = agora.strftime("%m"), agora.strftime("%y")
 
-        print(f"{Cor.ORANGE}=== SISTEMA LRO - Escala Cumprida ==={Cor.RESET}")
-        
-        inp_mes = input(f"MÊS (Enter para {mes_atual}): ")
+        # ========================================================
+        # 1. PAINEL DE TÍTULO DO MÓDULO
+        # ========================================================
+        titulo = Text("SISTEMA LRO\nGerador de Escala Cumprida e Auditoria", justify="center", style="bold dark_orange")
+        painel_titulo = Panel(titulo, border_style="dark_orange", padding=(1, 2), width=65)
+        console.print(Align.center(painel_titulo))
+        console.print("\n")
+
+        # ========================================================
+        # 2. INPUT DE MÊS E ANO (Modernizado)
+        # ========================================================
+        inp_mes = console.input(" " * 18 + f"[bold dark_orange]MÊS[/bold dark_orange] [dim white](Enter para {mes_atual}):[/dim white] ").strip()
         mes = inp_mes.zfill(2) if inp_mes else mes_atual
-        inp_ano = input(f"ANO (Enter para {ano_atual_curto}): ")
+        
+        inp_ano = console.input(" " * 18 + f"[bold dark_orange]ANO[/bold dark_orange] [dim white](Enter para {ano_atual_curto}):[/dim white] ").strip()
         ano_curto = inp_ano if inp_ano else ano_atual_curto
         ano_longo = "20" + ano_curto
 
@@ -400,13 +423,36 @@ def executar():
 
         while True:
             utils.limpar_tela()
-            print(f"{Cor.ORANGE}=== SISTEMA LRO - Escala Cumprida ({mes}/{ano_curto}) ==={Cor.RESET}")
-            print(f"\n{Cor.CYAN}Qual escala deseja gerar?{Cor.RESET}")
-            print("  [1] SMC")
-            print("  [2] BCT")
-            print("  [3] OEA")
-            print("  [0] Voltar ao Menu")
-            opcao_escala = input("\nOpção: ")
+            
+            titulo_menu = Text(f"PERÍODO SELECIONADO: {mes}/{ano_longo}", justify="center", style="bold white on dark_orange")
+            console.print(Align.center(Panel(titulo_menu, border_style="dark_orange", width=65)))
+            console.print("\n")
+            
+            # ========================================================
+            # 3. MENU DE ESPECIALIDADES EM PAINEL
+            # ========================================================
+            menu_opcoes = Text()
+            menu_opcoes.append("  [1] ", style="bold dark_orange")
+            menu_opcoes.append("Escala Cumprida - SMC\n")
+            menu_opcoes.append("  [2] ", style="bold dark_orange")
+            menu_opcoes.append("Escala Cumprida - BCT\n")
+            menu_opcoes.append("  [3] ", style="bold dark_orange")
+            menu_opcoes.append("Escala Cumprida - OEA\n\n")
+            menu_opcoes.append("  [0] ", style="bold red")
+            menu_opcoes.append("Voltar ao Menu Principal")
+
+            painel_menu = Panel(
+                menu_opcoes, 
+                border_style="dim white", 
+                title="[bold white]Selecione a Especialidade[/bold white]", 
+                title_align="left",
+                width=65,
+                padding=(1, 2)
+            )
+            console.print(Align.center(painel_menu))
+            console.print()
+
+            opcao_escala = Prompt.ask(" " * 22 + "[bold white]Opção desejada[/bold white]", choices=["0", "1", "2", "3"])
             
             if opcao_escala == '0': return 
             if opcao_escala not in ['1', '2', '3']: continue
@@ -415,7 +461,7 @@ def executar():
             path_mes = os.path.join(path_ano, Config.MAPA_PASTAS.get(mes, "X"))
             
             if not os.path.exists(path_mes):
-                print(f"{Cor.RED}Pasta não encontrada.{Cor.RESET}")
+                console.print(Align.center(Panel(f"[bold red]Pasta não encontrada para o período {mes}/{ano_longo}.[/bold red]", border_style="red")))
                 time.sleep(2)
                 break
 
@@ -423,7 +469,9 @@ def executar():
             except: break
             if mes == mes_atual and ano_curto == ano_atual_curto: qtd_dias = agora.day
 
-            # DETEÇÃO DO CACHE E PERGUNTA AO USUÁRIO
+            # ========================================================
+            # 4. DETEÇÃO DO CACHE E PERGUNTA AO USUÁRIO
+            # ========================================================
             import json
             especialidade_nome = 'smc' if opcao_escala == '1' else 'bct' if opcao_escala == '2' else 'oea'
             caminho_cache = os.path.join(path_mes, f".cache_escala_{especialidade_nome}.json")
@@ -431,9 +479,20 @@ def executar():
             
             if os.path.exists(caminho_cache):
                 utils.limpar_tela()
-                print(f"{Cor.ORANGE}=== SISTEMA LRO - Escala Cumprida ({mes}/{ano_curto}) ==={Cor.RESET}")
-                print(f"\n{Cor.YELLOW}💾 PROGRESSO SALVO DETETADO!{Cor.RESET}")
-                print(f"{Cor.GREY}Encontramos auditorias manuais feitas anteriormente para a escala de {especialidade_nome.upper()}.{Cor.RESET}\n")
+                
+                alerta_cache = Text()
+                alerta_cache.append(f"Encontramos auditorias manuais feitas anteriormente para a escala de {especialidade_nome.upper()}.\n\n", style="dim white")
+                alerta_cache.append("Como deseja prosseguir com a geração da tabela?", style="bold yellow")
+                
+                painel_cache = Panel(
+                    alerta_cache,
+                    title="[bold yellow]💾 PROGRESSO SALVO DETETADO![/bold yellow]",
+                    border_style="yellow",
+                    padding=(1, 2),
+                    width=65
+                )
+                console.print(Align.center(painel_cache))
+                console.print("\n")
                 
                 if utils.pedir_confirmacao(f"{Cor.CYAN}>> Deseja RETOMAR de onde parou? (S/Enter p/ Sim, ESC p/ Reiniciar do zero): {Cor.RESET}"):
                     try:
@@ -545,19 +604,41 @@ def executar():
                     with open(caminho_cache, 'w', encoding='utf-8') as f: json.dump(escala_detalhada, f, indent=4)
                 except: pass
 
-            # --- 1. ALERTA DE SEGURANÇA OPERACIONAL (RADAR) ---
+            # --- 1. ALERTA DE SEGURANÇA OPERACIONAL (RADAR) COM RICH ---
             if opcao_escala in ['2', '3']:
                 inconsistencias, _, _ = verificar_e_propor_correcoes(escala_detalhada, mapa_ativo, ano_longo, mes)
+                
+                from rich.panel import Panel
+                from rich.text import Text
+                from rich.align import Align
+                from rich.console import Console
+                console_rich = Console()
+                
                 if inconsistencias:
-                    print(f"\n{Cor.bg_RED}{Cor.WHITE} 🚨 ALERTAS DE SEGURANÇA OPERACIONAL DETETADOS {Cor.RESET}\n")
+                    texto_alerta = Text()
                     for inc in inconsistencias: 
                         if "sem folga" in inc:
-                            print(f" {Cor.RED}• {inc}{Cor.RESET}")
+                            texto_alerta.append(f" {inc}\n", style="bold red")
                         elif "dobrou" in inc:
-                            print(f" {Cor.YELLOW}• {inc}{Cor.RESET}")
-                    print(f"\n{Cor.GREY}ℹ️  Nota: O sistema identificou quebra de descanso. Recomendada revisão na Auditoria Manual.{Cor.RESET}")
+                            texto_alerta.append(f" {inc}\n", style="bold yellow")
+                            
+                    texto_alerta.append("\nℹ️  Nota: O sistema identificou quebra de descanso. Recomendada revisão na Auditoria Manual.", style="dim white")
+                    
+                    painel = Panel(
+                        texto_alerta, 
+                        title="[bold white on red] 🚨 ANÁLISE PRÉVIA DE CONSISTÊNCIA [/bold white on red]", 
+                        border_style="red", 
+                        padding=(1, 2)
+                    )
+                    console_rich.print(Align.center(painel))
                 else:
-                    print(f"\n{Cor.GREEN}✅ Nenhuma quebra de descanso (folga/dobra) identificada na escala.{Cor.RESET}")
+                    painel = Panel(
+                        "[bold green]✅ Nenhuma quebra de descanso (folga/dobra) identificada na escala.[/bold green]", 
+                        title="[bold green] 🔍 ANÁLISE PRÉVIA DE CONSISTÊNCIA [/bold green]", 
+                        border_style="green", 
+                        padding=(1, 2)
+                    )
+                    console_rich.print(Align.center(painel))
 
             # --- 2. LOOP DE AUDITORIA MANUAL INFINITO ---
             while True:
@@ -577,14 +658,37 @@ def executar():
                 else:
                     break
 
-            # --- 3. RESUMO FINAL E GERAÇÃO DO PDF ---
+            # --- 3. RESUMO FINAL E GERAÇÃO DO PDF COM RICH ---
             if opcao_escala in ['2', '3']:
                 inc_final, _, _ = verificar_e_propor_correcoes(escala_detalhada, mapa_ativo, ano_longo, mes)
-                print("\n" + f"{Cor.bg_ORANGE}{Cor.WHITE} RESUMO DA AUDITORIA OPERACIONAL {Cor.RESET}".center(tracos + 10))
+                
+                from rich.panel import Panel
+                from rich.text import Text
+                from rich.align import Align
+                from rich.console import Console
+                console_rich = Console()
+                
+                print("\n")
                 if inc_final:
-                    for inc in inc_final: print(f"{Cor.RED}{inc}{Cor.RESET}")
-                else: print(f"{Cor.GREEN}✅ Escala consistente com as normas de folga.{Cor.RESET}")
-                print("-" * tracos)
+                    texto_final = Text()
+                    for inc in inc_final: 
+                        texto_final.append(f" {inc}\n", style="bold red")
+                        
+                    painel_final = Panel(
+                        texto_final, 
+                        title="[bold red]RESUMO DA AUDITORIA OPERACIONAL[/bold red]", 
+                        border_style="red", 
+                        padding=(1, 2)
+                    )
+                else:
+                    painel_final = Panel(
+                        "[bold green]✅ Escala validada e consistente com as normas de folga.[/bold green]", 
+                        title="[bold green]RESUMO DA AUDITORIA OPERACIONAL[/bold green]",
+                        border_style="green", 
+                        padding=(1, 2)
+                    )
+                    
+                console_rich.print(Align.center(painel_final))
                 
                 if utils.pedir_confirmacao(f"\n{Cor.CYAN}>> Deseja GERAR O PDF OFICIAL desta Escala Cumprida? (S/Enter p/ Sim, ESC p/ Pular): {Cor.RESET}"):
                     gerar_pdf_escala(escala_detalhada, mapa_ativo, opcao_escala, mes, ano_longo)
