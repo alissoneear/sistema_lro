@@ -51,14 +51,30 @@ def renomear_arquivo(caminho_atual, novo_caminho):
             break
 
 def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.align import Align
+    console = Console()
+    
     if not lista_pendentes: return
-    print(f"{Cor.ORANGE}Verificar {len(lista_pendentes)} livros pendentes?{Cor.RESET}")
-    if not utils.pedir_confirmacao("Iniciar UM POR UM? (S/Enter p/ Sim, ESC p/ Pular): "): return
+    
+    console.print("\n")
+    painel_verificacao = Panel(
+        f"[bold white]Existem [dark_orange]{len(lista_pendentes)}[/dark_orange] livros pendentes de análise visual e assinatura.[/bold white]",
+        title="[bold dark_orange]🔎 INICIAR AUDITORIA VISUAL[/bold dark_orange]",
+        border_style="dark_orange",
+        padding=(1, 2),
+        width=75
+    )
+    console.print(Align.center(painel_verificacao))
+    console.print()
+    
+    if not utils.pedir_confirmacao(">> Iniciar verificação UM POR UM? (S/Enter p/ Sim, ESC p/ Pular): "): return
 
     print("\n")
     abrir_pdfs = utils.pedir_confirmacao(f"{Cor.YELLOW}Deseja ABRIR os PDFs para acompanhamento? (S/Enter p/ Sim, ESC p/ Modo Rápido): {Cor.RESET}")
     
-    # NOVO: PERGUNTA PARA INTEGRAÇÃO COM A ESCALA CUMPRIDA
+    # PERGUNTA PARA INTEGRAÇÃO COM A ESCALA CUMPRIDA
     integrar_escala = utils.pedir_confirmacao(f"{Cor.YELLOW}Deseja alimentar a ESCALA CUMPRIDA durante a verificação? (S/Enter p/ Sim, ESC p/ Não): {Cor.RESET}")
 
     for cnt, item in enumerate(lista_pendentes, start=1):
@@ -101,7 +117,7 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
             else:
                 print(f"{Cor.GREY}   [-] Mantido.{Cor.RESET}")
                 
-        # NOVO: ALIMENTAÇÃO DO CACHE DA ESCALA CUMPRIDA
+        # ALIMENTAÇÃO DO CACHE DA ESCALA CUMPRIDA
         if integrar_escala:
             import json
             m_smc, m_bct, m_oea = DadosEfetivo.mapear_efetivo(mes, ano_curto)
@@ -114,7 +130,6 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
             l_bct = utils.encontrar_legenda(n_bct, m_bct) if n_bct not in ['---', '???'] else '---'
             l_oea = utils.encontrar_legenda(n_oea, m_oea) if n_oea not in ['---', '???'] else '---'
             
-            # 👉 CORREÇÃO 1: Função para descobrir o nome real a partir da nova legenda
             def obter_nome_pela_legenda(legenda_alvo, mapa):
                 for nome_guerra, dados_mapa in mapa.items():
                     if dados_mapa['legenda'] == legenda_alvo:
@@ -404,7 +419,10 @@ def executar():
                 console.print(Align.center(f"[bold red]Erro ao salvar TXT: {e}[/bold red]"))
 
         if lista_para_criar:
-            print(f"\n{Cor.CYAN}--- GERAÇÃO INTELIGENTE DE ARQUIVOS 'FALTA LRO' ---{Cor.RESET}")
+            console.print("\n")
+            titulo_geracao = Text("GERAÇÃO INTELIGENTE DE ARQUIVOS 'FALTA LRO'", justify="center", style="bold white on deep_sky_blue1")
+            console.print(Align.center(Panel(titulo_geracao, border_style="deep_sky_blue1", width=75)))
+            
             for item in lista_para_criar:
                 data_str = item['str']
                 turno = item['turno']
@@ -425,17 +443,14 @@ def executar():
                     path_a = os.path.join(Config.CAMINHO_RAIZ, f"LRO {dt.strftime('%Y')}")
                     return os.path.join(path_a, Config.MAPA_PASTAS.get(dt.strftime('%m'), "X"))
 
-                # Alterado para usar a nova função de extração pelo dicionário
                 def get_nome_adjacente(dt, tr, is_prev):
                     p_mes = get_path_mes(dt)
                     d_str = f"{dt.day:02d}{dt.strftime('%m')}{dt.strftime('%y')}"
                     arquivos = utils.buscar_arquivos_flexivel(p_mes, d_str, tr)
                     
-                    # Filtra apenas os PDFs (para não tentar ler arquivos .txt de 'FALTA LRO')
                     pdfs = [f for f in arquivos if f.lower().endswith('.pdf')]
                     
                     if pdfs:
-                        # Dá prioridade aos que já têm OK, mas se não tiver, lê o PDF pendente mesmo assim!
                         ok_files = [f for f in pdfs if "OK" in f.upper()]
                         arquivo_alvo = ok_files[0] if ok_files else pdfs[0]
                         
@@ -458,16 +473,31 @@ def executar():
                 sugestao_str = f" ({sugestao})" if sugestao else " ()"
                 novo_nome = f"{data_str}_{turno}TURNO FALTA LRO{sugestao_str}.txt"
                 
-                print(f"\n{Cor.YELLOW}[FALTA LRO] {data_str} - {turno}º Turno{Cor.RESET}")
-                print(f" ⬅️  Turno anterior passou para: {Cor.CYAN}{passou_nome}{Cor.RESET}")
-                print(f" ➡️  Turno seguinte recebeu de:  {Cor.CYAN}{recebeu_nome}{Cor.RESET}")
+                # ========================================================
+                # NOVO VISUAL PARA A GERAÇÃO DE ARQUIVO
+                # ========================================================
+                console.print()
+                texto_falta = Text()
+                texto_falta.append(f" ⬅️  Turno anterior passou para: ", style="dim white")
+                texto_falta.append(f"{passou_nome}\n", style="bold cyan")
+                texto_falta.append(f" ➡️  Turno seguinte recebeu de:  ", style="dim white")
+                texto_falta.append(f"{recebeu_nome}", style="bold cyan")
                 
-                if utils.pedir_confirmacao(f">> Criar arquivo '{novo_nome}'? (S/Enter p/ Sim, ESC p/ Pular): "):
+                painel_falta = Panel(
+                    texto_falta,
+                    title=f"[bold yellow][FALTA LRO] {data_str} - {turno}º Turno[/bold yellow]",
+                    border_style="yellow",
+                    padding=(0, 2),
+                    width=65
+                )
+                console.print(Align.center(painel_falta))
+                
+                if utils.pedir_confirmacao(f" " * 5 + f">> Criar ficheiro '{novo_nome}'? (S/Enter p/ Sim, ESC p/ Pular): "):
                     try: 
                         with open(os.path.join(path_mes, novo_nome), 'w') as f: f.write("Falta")
-                        print(f"{Cor.GREEN}   [V] Criado com sucesso.{Cor.RESET}")
+                        console.print(Align.center("[bold green]✅ Ficheiro criado com sucesso.[/bold green]"))
                     except Exception as e: 
-                        print(f"{Cor.RED}   Erro ao criar: {e}{Cor.RESET}")
+                        console.print(Align.center(f"[bold red]Erro ao criar: {e}[/bold red]"))
 
         processo_verificacao_visual(lista_pendentes, mes, ano_curto)
 
