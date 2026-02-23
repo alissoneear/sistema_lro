@@ -1,31 +1,72 @@
 import time
 import sys
+
+# Importações do Rich
+from rich.console import Console
+from rich.panel import Panel
+from rich.align import Align
+from rich.text import Text
+from rich.prompt import Prompt
+
 from config import Cor
-from utils import limpar_tela
+import utils
 
 # Importa os módulos
 from modulos import verificador
-from modulos import conferencia # Novo!
+from modulos import conferencia
 from modulos import escala
+
+# Instancia o console principal do Rich
+console = Console()
 
 def menu_principal():
     while True:
-        limpar_tela()
-        print(f"{Cor.ORANGE}")
-        print("╔══════════════════════════════════════╗")
-        print("║                                      ║")
-        print("║             SISTEMA LRO              ║")
-        print("║                                      ║")
-        print("╚══════════════════════════════════════╝")
-        print(f"{Cor.RESET}")
+        utils.limpar_tela()
         
-        print("Escolha uma funcionalidade:\n")
-        print(f"  {Cor.CYAN}[1]{Cor.RESET} Verificador LRO (Validar/Assinar)")
-        print(f"  {Cor.CYAN}[2]{Cor.RESET} Conferência Rápida (Auxiliar Escala)")
-        print(f"  {Cor.CYAN}[3]{Cor.RESET} Escala Cumprida (Gerar Tabela/Auditoria)")
-        print(f"  {Cor.RED}[0]{Cor.RESET} Sair\n")
+        # ========================================================
+        # 1. PAINEL DE TÍTULO (Tema Dark Orange)
+        # ========================================================
+        titulo = Text("SISTEMA LRO\nCentro de Coordenação de Salvamento (ARCC-CW)", justify="center", style="bold dark_orange")
+        painel_titulo = Panel(titulo, border_style="dark_orange", padding=(1, 2), width=65)
+        console.print(Align.center(painel_titulo))
         
-        opcao = input("Opção: ")
+        console.print("\n") # 👈 Mais espaçamento (Respiro Visual)
+        
+        # ========================================================
+        # 2. DASHBOARD
+        # ========================================================
+        dashboard_txt = utils.gerar_dashboard_boas_vindas()
+        console.print(Align.center(Text.from_ansi(dashboard_txt)))
+        
+        console.print("\n") # 👈 Mais espaçamento (Respiro Visual)
+        
+        # ========================================================
+        # 3. PAINEL DE OPÇÕES
+        # ========================================================
+        menu_opcoes = Text()
+        menu_opcoes.append("  [1] ", style="bold dark_orange")
+        menu_opcoes.append("Verificador LRO (Validar/Assinar)\n")
+        menu_opcoes.append("  [2] ", style="bold dark_orange")
+        menu_opcoes.append("Conferência Rápida (Auxiliar Escala)\n")
+        menu_opcoes.append("  [3] ", style="bold dark_orange")
+        menu_opcoes.append("Escala Cumprida (Gerar Tabela/Auditoria)\n\n")
+        menu_opcoes.append("  [0] ", style="bold red")
+        menu_opcoes.append("Sair")
+
+        painel_menu = Panel(
+            menu_opcoes, 
+            border_style="dim white", 
+            title="[bold white]Menu de Operações[/bold white]", 
+            title_align="left",
+            width=65,
+            padding=(1, 2)
+        )
+        console.print(Align.center(painel_menu))
+        console.print()
+        
+
+        # 4. PROMPT INTELIGENTE DO RICH
+        opcao = Prompt.ask(" " * 22 + "[bold white]Opção desejada[/bold white]", choices=["0", "1", "2", "3"])
         
         if opcao == '1':
             verificador.executar()
@@ -34,16 +75,13 @@ def menu_principal():
         elif opcao == '3':
             escala.executar()
         elif opcao == '0':
-            limpar_tela()
-            print(f"{Cor.GREEN}A sair do SISTEMA LRO... Até à próxima!{Cor.RESET}\n")
+            utils.limpar_tela()
+            console.print(Panel("[bold green]Sessão encerrada. Bom descanso! 🚁[/bold green]", border_style="green", expand=False))
             break
-        else:
-            print(f"\n{Cor.RED}[!] Opção inválida! Tente novamente.{Cor.RESET}")
-            time.sleep(1.5)
 
 if __name__ == "__main__":
     try:
         menu_principal()
     except KeyboardInterrupt:
-        print(f"\n\n{Cor.GREEN}Sessão encerrada (CTRL+C). Até à próxima!{Cor.RESET}\n")
+        console.print("\n\n[bold red]Operação cancelada (CTRL+C).[/bold red]\n")
         sys.exit(0)

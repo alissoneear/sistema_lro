@@ -29,13 +29,14 @@ class Cor:
     ORANGE = '\033[38;5;208m'
     bg_BLUE = '\033[44m'
     bg_ORANGE = '\033[48;5;208m'
+    bg_RED = '\033[41m'
 
 class DadosEfetivo:
     legendas_smc = ['GEA', 'EVT', 'FCS', 'MAL', 'BAR', 'ESC', 'CPL', 'JAK', 'CER']
 
     # Efetivo Padrão / Atual
     nomes_oea = [
-        '1S QSS BCO LUIZ FILIPE TERBECK - 1S TERBECK - 6032338',           # A
+        '1S BCO LUIZ FILIPE TERBECK - 1S TERBECK - 6032338',               # A
         '1S BCO RUI ANTONIO DOS SANTOS JUNIOR - 1S RUI - 6032311',         # B
         '2S BCO SAULO JULIO SANTOS GONÇALVES - 2S SAULO - 6134262',        # C
         '2S BCO KEVIN SOUZA DE OLIVEIRA - 2S KEVIN - 6157912',             # D
@@ -68,7 +69,7 @@ class DadosEfetivo:
         'CAP QOECTA FÁBIO CÉSAR SILVA DE OLIVEIRA - CAP FÁBIO CÉSAR',      # FCS
         'CAP QOECTA JOSÉ GUILHERME MALTA - CAP MALTA',                     # MAL
         'CAP QOECTA BARBARA PACHECO LINS - CAP BARBARA',                   # BAR
-        'CAP EDGAR HENRIQUE ESCOBAR DOS SANTOS - CAP ESCOBAR',             # ESC
+        'CAP QOECTA EDGAR HENRIQUE ESCOBAR DOS SANTOS - CAP ESCOBAR',      # ESC
         '1T AV DANIEL BUERY DE MELO CAMPELO - 1T CAMPELO',                 # CPL
         '1T QOECTA JAKSON DA SILVA - 1T JAKSON',                           # JAK
         '1T QOECTA JULIMAR CERUTTI DA SILVA - 1T CERUTTI'                  # CER

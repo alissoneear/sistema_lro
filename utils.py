@@ -153,12 +153,74 @@ def extrair_dados_texto(texto_linear, dados, mes=None, ano_curto=None):
     dados["recebeu"] = re.sub(r",?\s*(?:ciente|cientificando).*$", "", raw_recebeu, flags=re.IGNORECASE).strip()
     dados["passou"] = re.sub(r",?\s*(?:ciente|cientificando).*$", "", raw_passou, flags=re.IGNORECASE).strip()
 
-    # Responsável pela Assinatura
-    match_resp_gov = re.search(r"validar\.iti\.gov\.br\s+([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ a-z]+?)\s*-", texto_linear, re.IGNORECASE)
-    if match_resp_gov: dados["responsavel"] = match_resp_gov.group(1).strip().upper()
+
+    # RESPONSÁVEL PELA ASSINATURA (Busca e Padronização de Nome Completo)
+    match_gov_limpo = re.search(r"assinado digitalmente\s+([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ a-z]+?)\s+Data", texto_linear, re.IGNORECASE)
+    match_gov_link = re.search(r"validar\.iti\.gov\.br\.?\s+([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ a-z]+?)\s*(?:-|\d[ST]|CAP|MAJ|SO|TEN)", texto_linear, re.IGNORECASE)
+    match_txt = re.search(r"ordens em vigor\.?\s*([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ a-z]{5,50}?)\s*(?:-|\d[ST]|CAP|MAJ|SO|TEN)", texto_linear, re.IGNORECASE)
+
+    responsavel_bruto = None
+    if match_gov_limpo and len(match_gov_limpo.group(1)) < 60:
+        responsavel_bruto = match_gov_limpo.group(1).strip().upper()
+    elif match_gov_link and len(match_gov_link.group(1)) < 60:
+        responsavel_bruto = match_gov_link.group(1).strip().upper()
+    elif match_txt and not re.search(r"gov\.br|assinado", match_txt.group(1), re.IGNORECASE):
+        responsavel_bruto = match_txt.group(1).strip().upper()
+
+    # --- Lógica de Padronização Oficial ---
+    from config import DadosEfetivo
+    chave = f"{mes}{ano_curto}" if mes and ano_curto else None
+    dados_hist = DadosEfetivo.HISTORICO.get(chave) if chave else None
+    
+    nomes_oea = dados_hist["oea"] if dados_hist else DadosEfetivo.nomes_oea
+    nomes_bct = dados_hist["bct"] if dados_hist else DadosEfetivo.nomes_bct
+    nomes_smc = DadosEfetivo.nomes_smc
+    todas_linhas_efetivo = nomes_oea + nomes_bct + nomes_smc
+
+    def obter_nome_oficial(texto_alvo):
+        """Pesquisa o militar através do Nome de Guerra ou do Primeiro + Segundo Nome."""
+        if not texto_alvo: return None
+        texto_norm = normalizar_texto(texto_alvo)
+        
+        # Lista de palavras a ignorar para isolar apenas o nome civil
+        patentes_quadros = ['1S', '2S', '3S', 'SO', 'TEN', '1T', '2T', 'CAP', 'MAJ', 'CEL', 'BCO', 'BCT', 'QSS', 'QOECTA', 'AV']
+        
+        for linha in todas_linhas_efetivo:
+            partes = [p.strip() for p in linha.split('-')]
+            nome_oficial = partes[0]
+            nome_guerra = partes[1] if len(partes) > 1 else nome_oficial
+            nome_base = extrair_nome_base(nome_guerra)
+            
+            # Isola apenas o nome civil (Ex: "FRANCISCO TORRES SOARES")
+            nome_oficial_norm = normalizar_texto(nome_oficial)
+            palavras = [w for w in nome_oficial_norm.split() if w not in patentes_quadros]
+            nome_pessoal = " ".join(palavras)
+            
+            # Pega os primeiros dois nomes (Ex: "FRANCISCO TORRES")
+            primeiros_dois = " ".join(palavras[:2]) if len(palavras) >= 2 else nome_pessoal
+            
+            # Regras de Match:
+            # 1. Nome de guerra está no texto? (Ex: SOARES)
+            if re.search(rf'\b{re.escape(nome_base)}\b', texto_norm):
+                return nome_oficial
+            # 2. Nome civil completo está no texto?
+            if nome_pessoal and nome_pessoal in texto_norm:
+                return nome_oficial
+            # 3. Primeiro e segundo nome estão no texto? (Ex: FRANCISCO TORRES)
+            if primeiros_dois and primeiros_dois in texto_norm:
+                return nome_oficial
+                
+        return None
+
+    if responsavel_bruto:
+        nome_encontrado = obter_nome_oficial(responsavel_bruto)
+        dados["responsavel"] = nome_encontrado if nome_encontrado else responsavel_bruto
     else:
-        match_resp_txt = re.search(r"ordens em vigor\.\s*([A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ a-z]+?)\s*-", texto_linear, re.IGNORECASE)
-        if match_resp_txt: dados["responsavel"] = match_resp_txt.group(1).strip().upper()
+        # Fallback Inteligente
+        texto_final = normalizar_texto(texto_linear[-300:])
+        nome_encontrado = obter_nome_oficial(texto_final)
+        dados["responsavel"] = nome_encontrado if nome_encontrado else "---"
+
 
 # Equipe (Agora totalmente automatizada e inteligente)
     match_bloco_eq = re.search(r"EQUIPE DE SERVI[CÇ]O:(.*?)3\.", texto_linear, re.IGNORECASE)
@@ -175,24 +237,51 @@ def extrair_dados_texto(texto_linear, dados, mes=None, ano_curto=None):
         dados["equipe"]["oea"] = busca_inteligente_equipe(txt_eq, m_oea)
 
 def analisar_conteudo_lro(caminho_pdf, mes=None, ano_curto=None):
+    # Dicionário blindado: Se qualquer coisa falhar, ele devolve os valores abaixo e evita o crash!
     dados = {
-        "cabecalho": "---", "responsavel": "---", "recebeu": "---", "passou": "---", 
+        "cabecalho": "---",
+        "responsavel": "---",
         "equipe": {"smc": "---", "bct": "---", "oea": "---"},
         "assinatura": verificar_assinatura_estrutural(caminho_pdf),
         "texto_completo": "",
-        "texto_equipe": "" 
+        "texto_equipe": "",
+        "recebeu": "---", # 👉 PROTEÇÃO ADICIONADA AQUI
+        "passou": "---",  # 👉 PROTEÇÃO ADICIONADA AQUI
+        "inconsistencia_data": None
     }
+    
     if PLUMBER_ENABLED:
         try:
             with pdfplumber.open(caminho_pdf) as pdf:
                 texto_completo = "".join([pagina.extract_text() or "" for pagina in pdf.pages])
                 texto_linear = texto_completo.replace('\n', ' ')
+                
                 dados["texto_completo"] = texto_linear
+                
                 if not dados["assinatura"] and "validar.iti.gov.br" in texto_linear.lower():
                     dados["assinatura"] = True
-                # Repassar mes e ano aqui:
+                    
+                # ====================================================
+                # NOVO: AUDITORIA DE COPIAR E COLAR (INCONSISTÊNCIA)
+                # ====================================================
+                nome_arq = os.path.basename(caminho_pdf)
+                match_arq = re.search(r'^(\d{2})', nome_arq) 
+                
+                if match_arq:
+                    dia_arq = match_arq.group(1)
+                    match_txt = re.search(r'do dia\s+(\d{1,2})\s+de', texto_linear, re.IGNORECASE)
+                    
+                    if match_txt:
+                        dia_txt = str(int(match_txt.group(1))).zfill(2)
+                        if dia_arq != dia_txt:
+                            dados["inconsistencia_data"] = f"ARQUIVO É DIA {dia_arq} ❌ MAS O TEXTO DIZ DIA {dia_txt}"
+                # ====================================================
+                
+                # Chamada crucial que alimenta o 'recebeu' e 'passou'
                 extrair_dados_texto(texto_linear, dados, mes, ano_curto)
-        except Exception: pass
+        except Exception: 
+            pass # Se algo falhar na leitura, ele engole o erro e retorna o dicionário blindado.
+            
     return dados
 
 def buscar_arquivos_flexivel(pasta, data_string, turno):
@@ -212,3 +301,37 @@ def calcular_turnos_validos(dia, mes_str, dia_atual, mes_atual, hora_atual):
         elif hora_atual < 21: turnos = [1]
         else: turnos = [1, 2]
     return turnos
+
+def gerar_dashboard_boas_vindas():
+    import datetime
+    import glob
+    agora = datetime.datetime.now()
+    mes, ano = agora.strftime("%m"), agora.strftime("%y")
+    ano_longo = "20" + ano
+    
+    path_ano = os.path.join(Config.CAMINHO_RAIZ, f"LRO {ano_longo}")
+    path_mes = os.path.join(path_ano, Config.MAPA_PASTAS.get(mes, "X"))
+    
+    if not os.path.exists(path_mes):
+        return f"{Cor.RED}⚠️ Pasta do mês atual ({mes}/{ano_longo}) não detetada.{Cor.RESET}"
+        
+    lros_ok, pendentes = 0, 0
+    arquivos = glob.glob(os.path.join(path_mes, "*TURNO*"))
+    
+    for arq in arquivos:
+        nome = os.path.basename(arq).upper()
+        if "OK" in nome: lros_ok += 1
+        elif "FALTA" in nome or ".TXT" in nome: pendentes += 1
+        elif ".PDF" in nome: pendentes += 1 # PDF por verificar
+        
+    if pendentes == 0 and lros_ok > 0:
+        cor_pendencia = Cor.GREEN
+        icone_pendencia = "✅"
+    elif lros_ok == 0:
+        cor_pendencia = Cor.GREY
+        icone_pendencia = "➖"
+    else:
+        cor_pendencia = Cor.YELLOW
+        icone_pendencia = "⚠️"
+        
+    return f"📊 STATUS DO MÊS ({mes}/{ano}): {Cor.GREEN}{lros_ok} LROs ✅{Cor.RESET}  |  {cor_pendencia}{pendentes} Pendências {icone_pendencia}{Cor.RESET}"
