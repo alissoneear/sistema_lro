@@ -58,13 +58,17 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
 
     print("\n")
     abrir_pdfs = utils.pedir_confirmacao(f"{Cor.YELLOW}Deseja ABRIR os PDFs para acompanhamento? (S/Enter p/ Sim, ESC p/ Modo Rápido): {Cor.RESET}")
+    
+    # ==========================================================
+    # NOVO: PERGUNTA PARA INTEGRAÇÃO COM A ESCALA CUMPRIDA
+    # ==========================================================
+    integrar_escala = utils.pedir_confirmacao(f"{Cor.YELLOW}Deseja alimentar a ESCALA CUMPRIDA durante a verificação? (S/Enter p/ Sim, ESC p/ Não): {Cor.RESET}")
 
     for cnt, item in enumerate(lista_pendentes, start=1):
         caminho, data_str, turno = item['path'], item['data'], item['turno']
         nome_atual = os.path.basename(caminho)
         
-        # --- NOVO ESPAÇAMENTO E DESTAQUE VISUAL ---
-        print("\n\n") # Duas quebras de linha para criar uma área de "respiro"
+        print("\n\n") 
         print(f"{Cor.bg_ORANGE}{Cor.WHITE}  ▶ LIVRO ({cnt}/{len(lista_pendentes)}) - Arquivo: {nome_atual}  {Cor.RESET}")
         
         if abrir_pdfs:
@@ -86,7 +90,6 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
                 print(f"{Cor.GREY}   [-] Mantido.{Cor.RESET}")
         else:
             nome_dic = extrair_nome_relato(info.get('responsavel', ''), mes, ano_curto)
-            
             if nome_dic != "???":
                 sugestao_str = f" ({nome_dic})"
             else:
@@ -100,6 +103,135 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
                 renomear_arquivo(caminho, novo_caminho)
             else:
                 print(f"{Cor.GREY}   [-] Mantido.{Cor.RESET}")
+                
+        # ==========================================================
+        # NOVO: ALIMENTAÇÃO DO CACHE DA ESCALA CUMPRIDA
+        # ==========================================================
+        if integrar_escala:
+            import json
+            m_smc, m_bct, m_oea = DadosEfetivo.mapear_efetivo(mes, ano_curto)
+            
+            n_smc = info['equipe'].get('smc', '---')
+            n_bct = info['equipe'].get('bct', '---')
+            n_oea = info['equipe'].get('oea', '---')
+            
+            l_smc = utils.encontrar_legenda(n_smc, m_smc) if n_smc not in ['---', '???'] else '---'
+            l_bct = utils.encontrar_legenda(n_bct, m_bct) if n_bct not in ['---', '???'] else '---'
+            l_oea = utils.encontrar_legenda(n_oea, m_oea) if n_oea not in ['---', '???'] else '---'
+            
+            # 👉 CORREÇÃO 1: Função para descobrir o nome real a partir da nova legenda
+            def obter_nome_pela_legenda(legenda_alvo, mapa):
+                for nome_guerra, dados_mapa in mapa.items():
+                    if dados_mapa['legenda'] == legenda_alvo:
+                        return utils.extrair_nome_base(nome_guerra)
+                return "???"
+            
+            while True:
+                print(f"\n{Cor.bg_BLUE}{Cor.WHITE} Aceitar inserção dos dados na escala cumprida? {Cor.RESET}")
+                print(f"DIA {data_str[:2]} de {Config.MAPA_PASTAS.get(mes, '')} de 20{ano_curto} | {turno}º Turno")
+                print(f" • SMC: {n_smc} ({Cor.CYAN}{l_smc}{Cor.RESET})")
+                print(f" • BCT: {n_bct} ({Cor.CYAN}{l_bct}{Cor.RESET})")
+                print(f" • OEA: {n_oea} ({Cor.CYAN}{l_oea}{Cor.RESET})")
+                
+                print(f"\n>> Opção [S/Enter=Sim | M=Modificar | ESC=Não]: ", end='', flush=True)
+                
+                if os.name == 'nt' and utils.MSVCRT_ENABLED:
+                    import msvcrt
+                    while True:
+                        tecla = msvcrt.getch()
+                        if tecla in [b's', b'S', b'\r']:
+                            print("Sim")
+                            acao = 'S'
+                            break
+                        elif tecla in [b'm', b'M']:
+                            print("Modificar")
+                            acao = 'M'
+                            break
+                        elif tecla == b'\x1b':
+                            print("Não")
+                            acao = 'N'
+                            break
+                else:
+                    resp = input().strip().upper()
+                    acao = 'M' if resp == 'M' else 'N' if resp == 'ESC' else 'S'
+                
+                if acao == 'N':
+                    print(f"{Cor.GREY}   [-] Inserção ignorada.{Cor.RESET}")
+                    break
+                elif acao == 'M':
+                    print(f"\n{Cor.YELLOW}--- MODIFICAR LEGENDAS ---{Cor.RESET}\n")
+                    
+                    # Função rápida para desenhar o mapa em colunas perfeitamente alinhadas
+                    def exibir_mapa_colunas(nome_escala, mapa, cor_titulo):
+                        print(f"{cor_titulo}■ EQUIPE {nome_escala}:{Cor.RESET}")
+                        
+                        # 👉 NOVO PADRÃO: [A] 1S TERBECK
+                        itens = [f"[{v['legenda']}] {k.split('-')[0].strip()}" for k, v in mapa.items()]
+                        
+                        # Quebra a lista e imprime de 4 em 4 colunas (espaçamento ajustado para 22)
+                        for i in range(0, len(itens), 4):
+                            linha = itens[i:i+4]
+                            print("   " + "".join(item.ljust(22) for item in linha))
+                        print("") # Linha em branco para respiro
+                        
+                    # Desenha as 3 escalas na tela
+                    exibir_mapa_colunas("SMC", m_smc, Cor.CYAN)
+                    exibir_mapa_colunas("BCT", m_bct, Cor.GREEN)
+                    exibir_mapa_colunas("OEA", m_oea, Cor.ORANGE)
+
+                    print(f"{Cor.GREY}(Deixe em branco e aperte Enter para manter a legenda atual){Cor.RESET}")
+                    
+                    nl_smc = input(f"Nova legenda SMC [{l_smc}]: ").strip().upper()
+                    nl_bct = input(f"Nova legenda BCT [{l_bct}]: ").strip().upper()
+                    nl_oea = input(f"Nova legenda OEA [{l_oea}]: ").strip().upper()
+                    
+                    # Atualizando a legenda E o nome 
+                    if nl_smc: 
+                        l_smc = nl_smc
+                        n_smc = obter_nome_pela_legenda(l_smc, m_smc)
+                    if nl_bct: 
+                        l_bct = nl_bct
+                        n_bct = obter_nome_pela_legenda(l_bct, m_bct)
+                    if nl_oea: 
+                        l_oea = nl_oea
+                        n_oea = obter_nome_pela_legenda(l_oea, m_oea)
+                    continue
+                    
+                elif acao == 'S':
+                    dia_str_int = str(int(data_str[:2])) 
+                    turno_str = str(turno)
+                    responsavel_ass = info.get('responsavel', '???')
+                    
+                    def salvar_cache(esp, dia_s, turno_s, leg, opcao_escala):
+                        if leg in ['---', '???', '']: return
+                        cam = os.path.join(dir_arq, f".cache_escala_{esp}.json")
+                        cache = {}
+                        if os.path.exists(cam):
+                            try:
+                                with open(cam, 'r', encoding='utf-8') as f: cache = json.load(f)
+                            except: pass
+                        
+                        if dia_s not in cache: cache[dia_s] = {}
+                        
+                        if opcao_escala == '1': 
+                            cache[dia_s]['smc'] = leg
+                        else: 
+                            # 👉 CORREÇÃO 2: Salvando o Dicionário completo para o Turbo Cache não quebrar!
+                            cache[dia_s][turno_s] = {
+                                'legenda': leg,
+                                'assinatura_nome': responsavel_ass
+                            }
+                            
+                        try:
+                            with open(cam, 'w', encoding='utf-8') as f: json.dump(cache, f, indent=4)
+                        except: pass
+                        
+                    salvar_cache('smc', dia_str_int, turno_str, l_smc, '1')
+                    salvar_cache('bct', dia_str_int, turno_str, l_bct, '2')
+                    salvar_cache('oea', dia_str_int, turno_str, l_oea, '3')
+                    
+                    print(f"{Cor.GREEN}   ✅ Cache da Escala Cumprida alimentado com sucesso!{Cor.RESET}")
+                    break
 
 # --- FUNÇÃO INTELIGENTE DE EXTRAÇÃO DE NOME ---
 def extrair_nome_relato(raw_str, mes=None, ano_curto=None):

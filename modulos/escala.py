@@ -212,7 +212,7 @@ def realizar_auditoria_manual(escala_detalhada, mes, ano_curto, path_mes, opcao_
 
 def verificar_e_propor_correcoes(escala_detalhada, mapa_efetivo, ano, mes):
     inconsistencias = [] 
-    correcoes = []       
+    correcoes = []       # Não usaremos mais auto-correção, deixaremos a lista vazia
     alertas_manuais = {} # Dicionário: (dia, turno) -> [motivos]
     dias = sorted(escala_detalhada.keys())
     ignorar = ['---', '???', 'PND', 'ERR']
@@ -233,26 +233,20 @@ def verificar_e_propor_correcoes(escala_detalhada, mapa_efetivo, ano, mes):
         
         # --- REGRA 1: DOBRA DE TURNO ---
         violacao = None
-        turno_suspeito = None
-        if l1 not in ignorar and l1 == l2: violacao = (1, 2, l1); turno_suspeito = 2
-        elif l2 not in ignorar and l2 == l3: violacao = (2, 3, l2); turno_suspeito = 3
+        if l1 not in ignorar and l1 == l2: violacao = (1, 2, l1)
+        elif l2 not in ignorar and l2 == l3: violacao = (2, 3, l2)
 
         if violacao:
             t_a, t_b, leg = violacao
             nome_mil = obter_info_militar(leg, mapa_efetivo)
-            leg_ass = obter_legenda_pelo_nome(dados_dia[turno_suspeito]['assinatura_nome'])
             
             # Motivos para a revisão visual
             motivo_dobra = f"Possível dobra de turno detetada ({t_a}º e {t_b}º) do militar {nome_mil} ({leg})."
             add_alerta(dia, t_a, motivo_dobra)
             add_alerta(dia, t_b, motivo_dobra)
             
-            if leg_ass not in ['---', '???'] and leg_ass != leg:
-                nome_correto = obter_info_militar(leg_ass, mapa_efetivo)
-                inconsistencias.append(f"⚠️ Dia {dia:02d} ({dia_sem}): Militar {nome_mil} ({leg}) em turnos seguidos ({t_a}º/{t_b}º).\n      ↳ 🕵️‍♂️ {Cor.GREEN}SOLUÇÃO:{Cor.RESET} O {t_b}ºT foi assinado por {nome_correto} ({leg_ass}). Erro de digitação.")
-                correcoes.append({'dia': dia, 'turno': turno_suspeito, 'nova_leg': leg_ass})
-            else:
-                inconsistencias.append(f"⚠️ Dia {dia:02d} ({dia_sem}): Militar {nome_mil} ({leg}) dobrou o turno ({t_a}º e {t_b}º).\n      ↳ ⚖️ {Cor.YELLOW}INFO:{Cor.RESET} Assinaturas confirmam que o militar cumpriu ambos os turnos.")
+            # Apenas relata o problema (Sem tentar adivinhar a solução)
+            inconsistencias.append(f"Dia {dia:02d} ({dia_sem}): Militar {nome_mil} ({leg}) dobrou o turno ({t_a}º e {t_b}º).")
 
         # --- REGRA 2: FOLGA PÓS-3º TURNO ---
         if i > 0:
@@ -264,30 +258,16 @@ def verificar_e_propor_correcoes(escala_detalhada, mapa_efetivo, ano, mes):
                 turnos_hoje_violados = [t for t in [1, 2, 3] if escala_detalhada[dia][t]['legenda'] == l3_ant]
                 if turnos_hoje_violados:
                     nome_mil = obter_info_militar(l3_ant, mapa_efetivo)
-                    pistas = []
-                    violation_real = True 
 
                     for t_hoje in turnos_hoje_violados:
-                        # Adiciona o alerta para quem está a falhar a folga hoje e quem tirou o T3 ontem
                         motivo_folga_hoje = f"Falta de folga regulamentar. O militar {nome_mil} ({l3_ant}) estava escalado no 3º Turno do dia {dia_ant:02d}."
                         motivo_folga_ontem = f"Militar {nome_mil} ({l3_ant}) escalado aqui, mas aparece sem folga no {t_hoje}º Turno do dia seguinte ({dia:02d})."
                         
                         add_alerta(dia, t_hoje, motivo_folga_hoje)
                         add_alerta(dia_ant, 3, motivo_folga_ontem)
 
-                        leg_ass_hoje = obter_legenda_pelo_nome(escala_detalhada[dia][t_hoje]['assinatura_nome'])
-                        if leg_ass_hoje not in ['---', '???'] and leg_ass_hoje != l3_ant:
-                            nome_correto = obter_info_militar(leg_ass_hoje, mapa_efetivo)
-                            pistas.append(f"O LRO do dia {dia:02d} ({t_hoje}ºT) foi assinado por {nome_correto} ({leg_ass_hoje}).")
-                            correcoes.append({'dia': dia, 'turno': t_hoje, 'nova_leg': leg_ass_hoje})
-                            violation_real = False
-
-                    msg_auditoria = ""
-                    if pistas: msg_auditoria = f"\n      ↳ 🕵️‍♂️ {Cor.GREEN}SOLUÇÃO:{Cor.RESET} " + " ".join(pistas) + " Provável erro de digitação."
-                    elif violation_real: msg_auditoria = f"\n      ↳ ⚖️ {Cor.YELLOW}INFO:{Cor.RESET} Assinaturas confirmam que {nome_mil} cumpriu o serviço sem a folga regulamentar."
-
-                    str_turnos = " e ".join([f"{t}º" for t in turnos_hoje_violados])
-                    inconsistencias.append(f"🚨 Dia {dia:02d} ({dia_sem}): Militar {nome_mil} ({l3_ant}) sem folga do dia {dia_ant:02d} ({dia_sem_ant}).{msg_auditoria}")
+                    # Apenas relata o problema
+                    inconsistencias.append(f"Dia {dia:02d} ({dia_sem}): Militar {nome_mil} ({l3_ant}) sem folga do dia {dia_ant:02d} ({dia_sem_ant}).")
                     
     return inconsistencias, correcoes, alertas_manuais
 
@@ -472,9 +452,7 @@ def executar():
             escala_detalhada = {}
             mapa_ativo = mapa_bct if opcao_escala == '2' else mapa_oea 
 
-          # ==========================================================
-            # NOVO: CONFIGURAÇÃO DA BARRA DE PROGRESSO FLUIDA (RICH PREMIUM)
-            # ==========================================================
+            # CONFIGURAÇÃO DA BARRA DE PROGRESSO FLUIDA (RICH PREMIUM)
             from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn, TimeElapsedColumn, SpinnerColumn
             
             total_passos = qtd_dias * 3
@@ -495,8 +473,7 @@ def executar():
             )
             tarefa_extracao = progress.add_task("Extraindo dados...", total=total_passos)
             
-            progress.start() # Inicia a barra na tela
-            # ==========================================================
+            progress.start()
 
             # Extração de Dados
             for dia in range(1, qtd_dias + 1):
@@ -568,16 +545,19 @@ def executar():
                     with open(caminho_cache, 'w', encoding='utf-8') as f: json.dump(escala_detalhada, f, indent=4)
                 except: pass
 
-            # --- 1. ANÁLISE PRÉVIA E PRIMEIRA EXIBIÇÃO ---
+            # --- 1. ALERTA DE SEGURANÇA OPERACIONAL (RADAR) ---
             if opcao_escala in ['2', '3']:
-                inconsistencias, correcoes, _ = verificar_e_propor_correcoes(escala_detalhada, mapa_ativo, ano_longo, mes)
+                inconsistencias, _, _ = verificar_e_propor_correcoes(escala_detalhada, mapa_ativo, ano_longo, mes)
                 if inconsistencias:
-                    print(f"\n{Cor.bg_BLUE}{Cor.WHITE} 🔍 ANÁLISE PRÉVIA DE CONSISTÊNCIA {Cor.RESET}")
-                    for inc in inconsistencias: print(f"{Cor.RED}{inc}{Cor.RESET}")
-                    if correcoes and utils.pedir_confirmacao(f"\n{Cor.YELLOW}>> Aplicar correções de digitação na tabela? (S/Enter p/ Sim, ESC p/ Não): {Cor.RESET}"):
-                        for c in correcoes: escala_detalhada[c['dia']][c['turno']]['legenda'] = c['nova_leg']
-
-            tracos = imprimir_tabela(escala_detalhada, qtd_dias, opcao_escala, ano_longo, mes)
+                    print(f"\n{Cor.bg_RED}{Cor.WHITE} 🚨 ALERTAS DE SEGURANÇA OPERACIONAL DETETADOS {Cor.RESET}\n")
+                    for inc in inconsistencias: 
+                        if "sem folga" in inc:
+                            print(f" {Cor.RED}• {inc}{Cor.RESET}")
+                        elif "dobrou" in inc:
+                            print(f" {Cor.YELLOW}• {inc}{Cor.RESET}")
+                    print(f"\n{Cor.GREY}ℹ️  Nota: O sistema identificou quebra de descanso. Recomendada revisão na Auditoria Manual.{Cor.RESET}")
+                else:
+                    print(f"\n{Cor.GREEN}✅ Nenhuma quebra de descanso (folga/dobra) identificada na escala.{Cor.RESET}")
 
             # --- 2. LOOP DE AUDITORIA MANUAL INFINITO ---
             while True:
