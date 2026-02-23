@@ -4,7 +4,6 @@ import datetime
 import calendar
 import re
 
-# Adicionado o DadosEfetivo aqui nas importações!
 from config import Config, Cor, DadosEfetivo 
 import utils
 
@@ -59,9 +58,7 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
     print("\n")
     abrir_pdfs = utils.pedir_confirmacao(f"{Cor.YELLOW}Deseja ABRIR os PDFs para acompanhamento? (S/Enter p/ Sim, ESC p/ Modo Rápido): {Cor.RESET}")
     
-    # ==========================================================
     # NOVO: PERGUNTA PARA INTEGRAÇÃO COM A ESCALA CUMPRIDA
-    # ==========================================================
     integrar_escala = utils.pedir_confirmacao(f"{Cor.YELLOW}Deseja alimentar a ESCALA CUMPRIDA durante a verificação? (S/Enter p/ Sim, ESC p/ Não): {Cor.RESET}")
 
     for cnt, item in enumerate(lista_pendentes, start=1):
@@ -104,9 +101,7 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
             else:
                 print(f"{Cor.GREY}   [-] Mantido.{Cor.RESET}")
                 
-        # ==========================================================
         # NOVO: ALIMENTAÇÃO DO CACHE DA ESCALA CUMPRIDA
-        # ==========================================================
         if integrar_escala:
             import json
             m_smc, m_bct, m_oea = DadosEfetivo.mapear_efetivo(mes, ano_curto)
@@ -281,17 +276,13 @@ def executar():
         agora = datetime.datetime.now()
         mes_atual, ano_atual_curto = agora.strftime("%m"), agora.strftime("%y")
 
-        # ========================================================
         # 1. PAINEL DE TÍTULO DO MÓDULO
-        # ========================================================
         titulo = Text("SISTEMA LRO\nVerificador e Assinador de Documentos", justify="center", style="bold dark_orange")
         painel_titulo = Panel(titulo, border_style="dark_orange", padding=(1, 2), width=65)
         console.print(Align.center(painel_titulo))
         console.print("\n")
 
-        # ========================================================
         # 2. INPUT DE MÊS E ANO (Modernizado)
-        # ========================================================
         if os.name == 'nt': 
             console.print(Align.center(f"[dim grey]Conectado: {Config.CAMINHO_RAIZ}[/dim grey]"))
             console.print()
@@ -324,79 +315,93 @@ def executar():
             
         if mes == mes_atual and ano_curto == ano_atual_curto: qtd_dias = agora.day
 
-        # ========================================================
-        # 3. BARRA DE PROGRESSO DE LEITURA DAS PASTAS
-        # ========================================================
+        # 3. ANÁLISE SILENCIOSA E PAINEL DE STATUS
         utils.limpar_tela()
         titulo_analise = Text(f"ANALISANDO DIRETÓRIOS: {Config.MAPA_PASTAS.get(mes)} / {ano_longo}", justify="center", style="bold white on deep_sky_blue1")
         console.print(Align.center(Panel(titulo_analise, border_style="deep_sky_blue1", width=65)))
-        console.print("\n")
-
+        
         problemas = 0
         relatorio, lista_pendentes, lista_para_criar, lista_ano_errado = [], [], [], []
+        
+        # Contadores para o painel analítico
+        qtd_falta_ass, qtd_lro_feito_txt, qtd_nao_confeccionado, qtd_pendente, qtd_inexistente = 0, 0, 0, 0, 0
 
-        for dia in range(1, qtd_dias + 1):
-            dia_fmt = f"{dia:02d}"
-            data_str = f"{dia_fmt}{mes}{ano_curto}"
-            data_str_err = f"{dia_fmt}{mes}{ano_errado}"
-            turnos = utils.calcular_turnos_validos(dia, mes, agora.day, mes_atual, agora.hour)
+        # O rich.status faz uma animação giratória enquanto o código varre as pastas
+        with console.status("[bold deep_sky_blue1]A varrer ficheiros e a extrair dados...", spinner="dots"):
+            for dia in range(1, qtd_dias + 1):
+                dia_fmt = f"{dia:02d}"
+                data_str = f"{dia_fmt}{mes}{ano_curto}"
+                data_str_err = f"{dia_fmt}{mes}{ano_errado}"
+                turnos = utils.calcular_turnos_validos(dia, mes, agora.day, mes_atual, agora.hour)
 
-            for turno in turnos:
-                arquivos_turno = utils.buscar_arquivos_flexivel(path_mes, data_str, turno)
-                arquivos_errados = utils.buscar_arquivos_flexivel(path_mes, data_str_err, turno)
-                tem_ok = [f for f in arquivos_turno if "OK" in f.upper()]
-                tem_falta_ass = [f for f in arquivos_turno if "FALTA ASS" in f.upper()]
-                tem_falta_lro = [f for f in arquivos_turno if "FALTA LRO" in f.upper()]
-                tem_novo = [f for f in arquivos_turno if "OK" not in f.upper() and "FALTA" not in f.upper()]
-
-                if tem_ok: continue
-                elif tem_falta_ass:
-                    print(f"{Cor.YELLOW}[!] FALTA ASSINATURA: {os.path.basename(tem_falta_ass[0])}{Cor.RESET}")
-                    relatorio.append(os.path.basename(tem_falta_ass[0])); problemas += 1
-                elif tem_novo and tem_falta_lro:
-                    print(f"{Cor.DARK_YELLOW}[!] LRO FEITO (TXT PRESENTE): {os.path.basename(tem_novo[0])}{Cor.RESET}")
-                    lista_pendentes.append({'path': tem_novo[0], 'data': data_str, 'turno': turno}); problemas += 1
-                elif tem_falta_lro:
-                    print(f"{Cor.MAGENTA}[!] NÃO CONFECCIONADO: {os.path.basename(tem_falta_lro[0])}{Cor.RESET}")
-                    relatorio.append(os.path.basename(tem_falta_lro[0])); problemas += 1
-                elif tem_novo:
-                    n = os.path.basename(tem_novo[0])
-                    msg_padrao = "NOME FORA DO PADRÃO" if ("-" in n or " " in n.replace("TURNO", "")) else "PENDENTE DE VERIFICAÇÃO"
-                    print(f"{Cor.CYAN}[?] {msg_padrao}: {n}{Cor.RESET}")
-                    lista_pendentes.append({'path': tem_novo[0], 'data': data_str, 'turno': turno}); problemas += 1
-                elif arquivos_errados:
-                    print(f"{Cor.DARK_RED}[!] ANO INCORRETO: {os.path.basename(arquivos_errados[0])}{Cor.RESET}")
-                    lista_ano_errado.append(arquivos_errados[0]); problemas += 1
-                else:
-                    print(f"{Cor.RED}[X] INEXISTENTE: {data_str} - {turno}º Turno{Cor.RESET}")
-                    relatorio.append(f"Dia {dia_fmt} - {turno}º Turno: NÃO ENCONTRADO"); problemas += 1
+                for turno in turnos:
+                    arquivos_turno = utils.buscar_arquivos_flexivel(path_mes, data_str, turno)
+                    arquivos_errados = utils.buscar_arquivos_flexivel(path_mes, data_str_err, turno)
                     
-                    lista_para_criar.append({
-                        "str": data_str, "turno": turno, 
-                        "dia": dia, "mes": mes, "ano": ano_longo
-                    })
+                    tem_ok = [f for f in arquivos_turno if "OK" in f.upper()]
+                    tem_falta_ass = [f for f in arquivos_turno if "FALTA ASS" in f.upper()]
+                    tem_falta_lro = [f for f in arquivos_turno if "FALTA LRO" in f.upper()]
+                    tem_novo = [f for f in arquivos_turno if "OK" not in f.upper() and "FALTA" not in f.upper()]
 
-        print("-" * 60)
-        if problemas == 0: print(f"{Cor.GREEN}Tudo em dia!{Cor.RESET}\n")
+                    if tem_ok: continue
+                    elif tem_falta_ass:
+                        relatorio.append(os.path.basename(tem_falta_ass[0])); problemas += 1; qtd_falta_ass += 1
+                    elif tem_novo and tem_falta_lro:
+                        lista_pendentes.append({'path': tem_novo[0], 'data': data_str, 'turno': turno}); problemas += 1; qtd_lro_feito_txt += 1
+                    elif tem_falta_lro:
+                        relatorio.append(os.path.basename(tem_falta_lro[0])); problemas += 1; qtd_nao_confeccionado += 1
+                    elif tem_novo:
+                        lista_pendentes.append({'path': tem_novo[0], 'data': data_str, 'turno': turno}); problemas += 1; qtd_pendente += 1
+                    elif arquivos_errados:
+                        lista_ano_errado.append(arquivos_errados[0]); problemas += 1
+                    else:
+                        relatorio.append(f"Dia {dia_fmt} - {turno}º Turno: NÃO ENCONTRADO"); problemas += 1; qtd_inexistente += 1
+                        lista_para_criar.append({"str": data_str, "turno": turno, "dia": dia, "mes": mes, "ano": ano_longo})
+
+        # 4. EXIBIÇÃO DO PAINEL DE STATUS
+        console.print("\n")
+        if problemas == 0:
+            painel_status = Panel(
+                "[bold green]✅ Todos os livros do mês estão OK e validados![/bold green]",
+                title="[bold green]STATUS DO MÊS[/bold green]",
+                border_style="green",
+                padding=(1, 2),
+                width=75
+            )
+            console.print(Align.center(painel_status))
+        else:
+            texto_status = Text()
+            if qtd_pendente > 0: texto_status.append(f" 📄 {qtd_pendente} Livro(s) pendentes de verificação/assinatura\n", style="bold cyan")
+            if qtd_lro_feito_txt > 0: texto_status.append(f" 🔄 {qtd_lro_feito_txt} Livro(s) verificados, mas o TXT de cobrança continua na pasta\n", style="bold yellow")
+            if qtd_falta_ass > 0: texto_status.append(f" ✍️  {qtd_falta_ass} Livro(s) com ausência de assinatura\n", style="bold dark_orange")
+            if qtd_nao_confeccionado > 0: texto_status.append(f" ⚠️  {qtd_nao_confeccionado} Livro(s) NÃO CONFECCIONADOS (Cobrança ativa)\n", style="bold magenta")
+            if qtd_inexistente > 0: texto_status.append(f" ❌ {qtd_inexistente} Turno(s) INEXISTENTES (Necessário gerar cobrança)\n", style="bold red")
+            if len(lista_ano_errado) > 0: texto_status.append(f" 📅 {len(lista_ano_errado)} Livro(s) com o ano incorreto no nome\n", style="bold red")
+            
+            painel_status = Panel(
+                texto_status,
+                title="[bold red]⚠️ RESUMO DE PENDÊNCIAS ENCONTRADAS[/bold red]",
+                border_style="red",
+                padding=(1, 2),
+                width=75
+            )
+            console.print(Align.center(painel_status))
 
         corrigir_anos_errados(lista_ano_errado, ano_curto, ano_errado)
 
         if problemas > 0 and relatorio:
-            print(f"\n{Cor.bg_BLUE}{Cor.WHITE} --- COPIAR E COBRAR --- {Cor.RESET}")
-            for l in relatorio: print(l)
-            print("-" * 30 + "\n")
-            
-            # === NOVO: EXPORTAÇÃO AUTOMÁTICA DO RELATÓRIO ===
-            if utils.pedir_confirmacao(f">> Gerar ficheiro TXT com este relatório? (S/Enter p/ Sim, ESC p/ Não): "):
-                nome_relatorio = f"Relatorio_Pendencias_{mes}_{ano_longo}.txt"
-                caminho_relatorio = os.path.join(path_mes, nome_relatorio)
-                try:
-                    with open(caminho_relatorio, 'w', encoding='utf-8') as f:
-                        f.write(f"--- RELATÓRIO DE PENDÊNCIAS LRO ({mes}/{ano_longo}) ---\n\n")
-                        for l in relatorio: f.write(l + "\n")
-                    print(f"{Cor.GREEN}✅ Relatório salvo na pasta do mês: {nome_relatorio}{Cor.RESET}")
-                except Exception as e:
-                    print(f"{Cor.RED}Erro ao salvar o ficheiro: {e}{Cor.RESET}")
+
+            # 5. GERAÇÃO AUTOMÁTICA DO TXT DE COBRANÇA (Invisível na tela)
+            nome_relatorio = f"Relatorio_Pendencias_{mes}_{ano_longo}.txt"
+            caminho_relatorio = os.path.join(path_mes, nome_relatorio)
+            try:
+                with open(caminho_relatorio, 'w', encoding='utf-8') as f:
+                    f.write(f"--- RELATÓRIO DE PENDÊNCIAS LRO ({mes}/{ano_longo}) ---\n\n")
+                    for l in relatorio: f.write(l + "\n")
+
+                console.print(Align.center(f"[bold green]✅ Ficheiro '{nome_relatorio}' gerado e atualizado silenciosamente na pasta![/bold green]"))
+            except Exception as e:
+                console.print(Align.center(f"[bold red]Erro ao salvar TXT: {e}[/bold red]"))
 
         if lista_para_criar:
             print(f"\n{Cor.CYAN}--- GERAÇÃO INTELIGENTE DE ARQUIVOS 'FALTA LRO' ---{Cor.RESET}")
