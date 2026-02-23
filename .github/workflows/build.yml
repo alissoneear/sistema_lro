@@ -24,7 +24,7 @@ jobs:
 
     - name: Gerar Executável com PyInstaller
       run: |
-        python -m PyInstaller --onefile --console main.py
+        python -m PyInstaller --onefile --console --collect-all rich main.py
 
     - name: Upload do Executável
       uses: actions/upload-artifact@v4
