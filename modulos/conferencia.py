@@ -70,7 +70,6 @@ def executar():
 
         contador = 0
         
-        # Mapeamento do mês para gerar a Data Formatada perfeita
         MESES_NOME = {
             "01": "janeiro", "02": "fevereiro", "03": "março",
             "04": "abril", "05": "maio", "06": "junho",
@@ -93,17 +92,17 @@ def executar():
                 ok_files = [f for f in pdfs if "OK" in f.upper()]
                 arquivo_alvo = ok_files[0] if ok_files else pdfs[0]
                 
-                # Gera a data formatada e passa para a função do verificador
                 mes_limpo = MESES_NOME.get(mes, "mês")
                 data_formatada = f"📅 Dia {dia_fmt} de {mes_limpo} de 20{ano_curto} | {turno}º Turno"
                 
-                # Régua separadora elegante em vez do `print` tosco
                 console.print("\n") 
                 console.rule(f"[bold dark_orange]▶ CONFERÊNCIA - {os.path.basename(arquivo_alvo)}[/bold dark_orange]", style="dark_orange")
                 
                 info = utils.analisar_conteudo_lro(arquivo_alvo, mes, ano_curto)
                 
-                # Chama a função que criamos no verificador passando a data bonita!
+                # 👈 O TRUQUE DE MESTRE! A Conferência agora pede o filtro do Verificador emprestado!
+                info = verificador.enriquecer_info_lro(info, arquivo_alvo, mes, ano_curto)
+                
                 verificador.exibir_dados_analise(info, data_formatada)
                 
                 if not utils.pedir_confirmacao(f"\n>> Próximo turno? (S/Enter p/ Sim, ESC p/ Parar): "):

@@ -24,7 +24,6 @@ def recuperar_responsavel_legado(caminho_pdf):
                 if "GOV.BR" in nome or "DIGITALMENTE" in nome:
                     if i > 1: nome = linhas[i-2].upper()
                 
-                # CORREÇÃO: O À-ÿ garante que TUDO o que for acento, til ou cedilha seja lido perfeitamente
                 nome = re.sub(r'[^A-ZÀ-ÿ\s]', '', nome).strip()
                 if len(nome) > 5: return nome
         
@@ -58,7 +57,6 @@ def descobrir_legenda(texto_sujo, mapa):
     
     ts = str(texto_sujo).replace('Ο','O').replace('Τ','T').replace('Ε','E').replace('Α','A').replace('Μ','M').replace('Ν','N')
     
-    # CORREÇÃO: Função dedicada para transformar "LOURENÇO" e "RÉGIS" em "LOURENCO" e "REGIS"
     def remover_acentos(txt):
         return unicodedata.normalize('NFD', txt).encode('ascii', 'ignore').decode('utf-8').upper()
     
@@ -70,7 +68,6 @@ def descobrir_legenda(texto_sujo, mapa):
         return ng.strip()
         
     for ng in sorted(mapa.keys(), key=lambda x: len(limpar_p(x)), reverse=True):
-        # A MÁGICA ACONTECE AQUI: Tiramos os acentos do nome do Dicionário ANTES de comparar!
         nome_puro = remover_acentos(limpar_p(ng))
         nome_puro_limpo = re.sub(r'[^A-Z0-9]', '', nome_puro)
         
@@ -78,6 +75,42 @@ def descobrir_legenda(texto_sujo, mapa):
             return mapa[ng]['legenda']
             
     return '---'
+
+def enriquecer_info_lro(info, caminho_pdf, mes, ano_curto):
+    """Filtro que limpa o texto bruto e devolve apenas o Nome de Guerra oficial."""
+    if not info: return info
+    
+    if info.get('responsavel', '---') in ['---', '???', '', None]:
+        resp = recuperar_responsavel_legado(caminho_pdf)
+        if resp != '---': info['responsavel'] = resp
+
+    n_smc = info['equipe'].get('smc', '---')
+    n_bct = info['equipe'].get('bct', '---')
+    n_oea = info['equipe'].get('oea', '---')
+    
+    if n_bct in ['---', '???'] or n_oea in ['---', '???'] or n_smc in ['---', '???']:
+        f_smc, f_bct, f_oea = recuperar_equipe_legada(caminho_pdf, mes, ano_curto)
+        if n_smc in ['---', '???'] and f_smc != '---': n_smc = f_smc
+        if n_bct in ['---', '???'] and f_bct != '---': n_bct = f_bct
+        if n_oea in ['---', '???'] and f_oea != '---': n_oea = f_oea
+        
+    m_smc, m_bct, m_oea = DadosEfetivo.mapear_efetivo(mes, ano_curto)
+    
+    l_smc = descobrir_legenda(n_smc, m_smc)
+    l_bct = descobrir_legenda(n_bct, m_bct)
+    l_oea = descobrir_legenda(n_oea, m_oea)
+    
+    def obter_nome_limpo(legenda, mapa, original):
+        for ng, dados in mapa.items():
+            if dados['legenda'] == legenda: return ng
+        # Se não achou e o texto for muito grande (parágrafo inteiro), oculta para não poluir a tela
+        return original if len(original) < 30 else '---'
+        
+    info['equipe']['smc'] = obter_nome_limpo(l_smc, m_smc, n_smc)
+    info['equipe']['bct'] = obter_nome_limpo(l_bct, m_bct, n_bct)
+    info['equipe']['oea'] = obter_nome_limpo(l_oea, m_oea, n_oea)
+    
+    return info
 # ====================================================================
 
 def corrigir_anos_errados(lista_ano_errado, ano_curto, ano_errado):
@@ -198,25 +231,8 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
         console.print(Align.center("\n[dim grey]A analisar estrutura e texto do PDF...[/dim grey]\n"))
         info = utils.analisar_conteudo_lro(caminho, mes, ano_curto)
         
-        # --------------------------------------------------------
-        # INJEÇÃO DO CAÇA-FANTASMAS
-        # --------------------------------------------------------
-        if info:
-            if info.get('responsavel', '---') in ['---', '???', '', None]:
-                resp_fFantasma = recuperar_responsavel_legado(caminho)
-                if resp_fFantasma != '---': info['responsavel'] = resp_fFantasma
-
-            n_smc = info['equipe'].get('smc', '---')
-            n_bct = info['equipe'].get('bct', '---')
-            n_oea = info['equipe'].get('oea', '---')
-            
-            # Se faltar alguém, chama o motor inteligente
-            if n_bct in ['---', '???'] or n_oea in ['---', '???'] or n_smc in ['---', '???']:
-                f_smc, f_bct, f_oea = recuperar_equipe_legada(caminho, mes, ano_curto)
-                if n_smc in ['---', '???'] and f_smc != '---': info['equipe']['smc'] = f_smc
-                if n_bct in ['---', '???'] and f_bct != '---': info['equipe']['bct'] = f_bct
-                if n_oea in ['---', '???'] and f_oea != '---': info['equipe']['oea'] = f_oea
-        # --------------------------------------------------------
+        # 👈 INJEÇÃO DO FILTRO DE LIMPEZA AQUI
+        info = enriquecer_info_lro(info, caminho, mes, ano_curto)
 
         exibir_dados_analise(info, data_formatada)
         
@@ -250,19 +266,14 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
             import json
             m_smc, m_bct, m_oea = DadosEfetivo.mapear_efetivo(mes, ano_curto)
             
+            # Como a Info já foi limpa pelo enriquecedor, os nomes estão perfeitos (Ex: '1T CERUTTI')
             n_smc = info['equipe'].get('smc', '---')
             n_bct = info['equipe'].get('bct', '---')
             n_oea = info['equipe'].get('oea', '---')
             
-            # Substituindo o utils pelo novo Esmagador de Textos
             l_smc = descobrir_legenda(n_smc, m_smc)
             l_bct = descobrir_legenda(n_bct, m_bct)
             l_oea = descobrir_legenda(n_oea, m_oea)
-            
-            # Limpa a sujidade ("Controlador de ARCC") do terminal, substituindo pelo nome oficial bonito
-            if l_smc != '---': n_smc = obter_nome_pela_legenda(l_smc, m_smc)
-            if l_bct != '---': n_bct = obter_nome_pela_legenda(l_bct, m_bct)
-            if l_oea != '---': n_oea = obter_nome_pela_legenda(l_oea, m_oea)
             
             def obter_nome_pela_legenda(legenda_alvo, mapa):
                 for nome_guerra, dados_mapa in mapa.items():
