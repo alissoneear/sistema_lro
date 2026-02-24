@@ -1,0 +1,200 @@
+{
+    "SMC": [
+        {
+            "nome_completo": "MAJ AV THIAGO GEALH DE CAMPOS",
+            "nome_guerra": "MAJ GEALH",
+            "legenda": "GEA",
+            "saram": ""
+        },
+        {
+            "nome_completo": "MAJ QOECTA EVERTON RIBEIRO DA COSTA",
+            "nome_guerra": "MAJ EVERTON",
+            "legenda": "EVT",
+            "saram": ""
+        },
+        {
+            "nome_completo": "CAP QOECTA FÁBIO CÉSAR SILVA DE OLIVEIRA",
+            "nome_guerra": "CAP FÁBIO CÉSAR",
+            "legenda": "FCS",
+            "saram": ""
+        },
+        {
+            "nome_completo": "CAP QOECTA JOSÉ GUILHERME MALTA",
+            "nome_guerra": "CAP MALTA",
+            "legenda": "MAL",
+            "saram": ""
+        },
+        {
+            "nome_completo": "CAP QOECTA BARBARA PACHECO LINS",
+            "nome_guerra": "CAP BARBARA",
+            "legenda": "BAR",
+            "saram": ""
+        },
+        {
+            "nome_completo": "CAP QOECTA EDGAR HENRIQUE ESCOBAR DOS SANTOS",
+            "nome_guerra": "CAP ESCOBAR",
+            "legenda": "ESC",
+            "saram": ""
+        },
+        {
+            "nome_completo": "1T AV DANIEL BUERY DE MELO CAMPELO",
+            "nome_guerra": "1T CAMPELO",
+            "legenda": "CPL",
+            "saram": ""
+        },
+        {
+            "nome_completo": "1T QOECTA JAKSON DA SILVA",
+            "nome_guerra": "1T JAKSON",
+            "legenda": "JAK",
+            "saram": ""
+        },
+        {
+            "nome_completo": "1T QOECTA JULIMAR CERUTTI DA SILVA",
+            "nome_guerra": "1T CERUTTI",
+            "legenda": "CER",
+            "saram": ""
+        }
+    ],
+    "BCT": [
+        {
+            "nome_completo": "1S BCT DIOGO FAVARO WUNDERLICH",
+            "nome_guerra": "1S FAVARO",
+            "legenda": "A",
+            "saram": "4202317"
+        },
+        {
+            "nome_completo": "1S BCT RÉGIS FERRARI",
+            "nome_guerra": "1S RÉGIS",
+            "legenda": "B",
+            "saram": "4378717"
+        },
+        {
+            "nome_completo": "1S BCT CLEON FRAGA DOS SANTOS",
+            "nome_guerra": "1S CLEON",
+            "legenda": "C",
+            "saram": "4378660"
+        },
+        {
+            "nome_completo": "1S BCT MARCELO ZANOTTO GONÇALVES",
+            "nome_guerra": "1S ZANOTTO",
+            "legenda": "D",
+            "saram": "6100775"
+        },
+        {
+            "nome_completo": "1S BCT GIOVANNI COCCO ALVES",
+            "nome_guerra": "1S GIOVANNI",
+            "legenda": "E",
+            "saram": "6158080"
+        },
+        {
+            "nome_completo": "2S BCT YURI DE PAIVA WERNECK",
+            "nome_guerra": "2S WERNECK",
+            "legenda": "F",
+            "saram": "6301371"
+        },
+        {
+            "nome_completo": "2S BCT YURI WIES TRAUER",
+            "nome_guerra": "2S TRAUER",
+            "legenda": "G",
+            "saram": "6378781"
+        },
+        {
+            "nome_completo": "2S BCT EDSON DE SOUZA NUNES",
+            "nome_guerra": "2S EDSON",
+            "legenda": "H",
+            "saram": "6750451"
+        },
+        {
+            "nome_completo": "SO BCT MARCELO DE SOUZA PEREIRA",
+            "nome_guerra": "SO SOUZA",
+            "legenda": "I",
+            "saram": "3988554"
+        },
+        {
+            "nome_completo": "1S BCT GUSTAVO FRACAO LAGO",
+            "nome_guerra": "1S GUSTAVO",
+            "legenda": "J",
+            "saram": "4378482"
+        },
+        {
+            "nome_completo": "1S BCT EVANDRO MACHADO BITTENCOURT",
+            "nome_guerra": "1S BITTENCOURT",
+            "legenda": "K",
+            "saram": "6087841"
+        },
+        {
+            "nome_completo": "1S BCT CRISTIANO PAZ PRATES",
+            "nome_guerra": "1S PRATES",
+            "legenda": "L",
+            "saram": "4378768"
+        },
+        {
+            "nome_completo": "2S BCT LIS CECI LYRA FONTES",
+            "nome_guerra": "2S LIS",
+            "legenda": "M",
+            "saram": "6301118"
+        },
+        {
+            "nome_completo": "2S BCT EDUARDO OLIVEIRA DE CASTRO",
+            "nome_guerra": "2S DE CASTRO",
+            "legenda": "N",
+            "saram": "6576044"
+        }
+    ],
+    "OEA": [
+        {
+            "nome_completo": "1S BCO LUIZ FILIPE TERBECK",
+            "nome_guerra": "1S TERBECK",
+            "legenda": "A",
+            "saram": "6032338"
+        },
+        {
+            "nome_completo": "1S BCO RUI ANTONIO DOS SANTOS JUNIOR",
+            "nome_guerra": "1S RUI",
+            "legenda": "B",
+            "saram": "6032311"
+        },
+        {
+            "nome_completo": "2S BCO SAULO JULIO SANTOS GONÇALVES",
+            "nome_guerra": "2S SAULO",
+            "legenda": "C",
+            "saram": "6134262"
+        },
+        {
+            "nome_completo": "2S BCO KEVIN SOUZA DE OLIVEIRA",
+            "nome_guerra": "2S KEVIN",
+            "legenda": "D",
+            "saram": "6157912"
+        },
+        {
+            "nome_completo": "2S BCO ALAN SITORSKI",
+            "nome_guerra": "2S SITORSKI",
+            "legenda": "E",
+            "saram": "6156568"
+        },
+        {
+            "nome_completo": "2S BCO LUCIANO FERNANDES DOS SANTOS",
+            "nome_guerra": "2S FERNANDES",
+            "legenda": "F",
+            "saram": "6156878"
+        },
+        {
+            "nome_completo": "SO BCO FRANCISCO TORRES SOARES",
+            "nome_guerra": "SO SOARES",
+            "legenda": "G",
+            "saram": "3502201"
+        },
+        {
+            "nome_completo": "2S BCO ELIAS EDVANEIDSON DE ARAUJO CARDOSO",
+            "nome_guerra": "2S ELIAS",
+            "legenda": "H",
+            "saram": "6328512"
+        },
+        {
+            "nome_completo": "2S BCO ALISSON LOURENÇO DA SILVA",
+            "nome_guerra": "2S LOURENÇO",
+            "legenda": "I",
+            "saram": "6780245"
+        }
+    ]
+}

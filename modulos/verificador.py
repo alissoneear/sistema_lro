@@ -8,15 +8,16 @@ from config import Config, Cor, DadosEfetivo
 import utils
 
 def corrigir_anos_errados(lista_ano_errado, ano_curto, ano_errado):
+    espaco = " " * 15
     if not lista_ano_errado: return
-    if utils.pedir_confirmacao(f"{Cor.DARK_RED}Corrigir {len(lista_ano_errado)} anos errados? (S/Enter p/ Sim, ESC p/ Pular): {Cor.RESET}"):
+    if utils.pedir_confirmacao(f"\n{espaco}{Cor.DARK_RED}Corrigir {len(lista_ano_errado)} anos errados? (S/Enter p/ Sim, ESC p/ Pular): {Cor.RESET}"):
         for arq in lista_ano_errado:
             utils.abrir_arquivo(arq)
-            if utils.pedir_confirmacao(f"   Renomear {os.path.basename(arq)}? (S/Enter p/ Sim, ESC p/ Não): "):
+            if utils.pedir_confirmacao(f"{espaco}>> Renomear {os.path.basename(arq)}? (S/Enter p/ Sim, ESC p/ Não): "):
                 try: 
                     os.rename(arq, arq.replace(ano_errado, ano_curto))
-                    print(f"{Cor.GREEN}   Renomeado com sucesso.{Cor.RESET}")
-                except Exception as e: print(f"{Cor.RED}   Erro ao renomear: {e}{Cor.RESET}")
+                    print(f"{espaco}{Cor.GREEN}[V] Renomeado com sucesso.{Cor.RESET}")
+                except Exception as e: print(f"{espaco}{Cor.RED}Erro ao renomear: {e}{Cor.RESET}")
 
 def exibir_dados_analise(info, data_formatada):
     from rich.panel import Panel
@@ -53,7 +54,7 @@ def exibir_dados_analise(info, data_formatada):
 
     painel = Panel(
         conteudo,
-        title=f"[bold green]{data_formatada}[/bold green]", # 👈 Título atualizado aqui!
+        title=f"[bold green]{data_formatada}[/bold green]",
         border_style="green",
         padding=(1, 2),
         width=75
@@ -61,16 +62,17 @@ def exibir_dados_analise(info, data_formatada):
     console.print(Align.center(painel))
 
 def renomear_arquivo(caminho_atual, novo_caminho):
+    espaco = " " * 15
     while True:
         try:
             os.rename(caminho_atual, novo_caminho)
-            print(f"{Cor.GREEN}   [V] Validado e Padronizado: {os.path.basename(novo_caminho)}{Cor.RESET}")
+            print(f"{espaco}{Cor.GREEN}[V] Validado e Padronizado: {os.path.basename(novo_caminho)}{Cor.RESET}")
             break
         except PermissionError: 
-            if not utils.pedir_confirmacao(f"{Cor.RED}   [!] Feche o ficheiro PDF! S/Enter p/ tentar novamente, ESC p/ pular.{Cor.RESET}"):
+            if not utils.pedir_confirmacao(f"{espaco}{Cor.RED}[!] Feche o ficheiro PDF! S/Enter p/ tentar novamente, ESC p/ pular.{Cor.RESET}"):
                 break
         except Exception as e: 
-            print(f"{Cor.RED}Erro: {e}{Cor.RESET}")
+            print(f"{espaco}{Cor.RED}Erro: {e}{Cor.RESET}")
             break
 
 def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
@@ -81,6 +83,8 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
     console = Console()
     
     if not lista_pendentes: return
+    
+    espaco = " " * 15 # Alinhamento centralizado para todas as perguntas
     
     console.print("\n")
     painel_verificacao = Panel(
@@ -93,26 +97,22 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
     console.print(Align.center(painel_verificacao))
     console.print()
     
-    if not utils.pedir_confirmacao(">> Iniciar verificação UM POR UM? (S/Enter p/ Sim, ESC p/ Pular): "): return
+    if not utils.pedir_confirmacao(f"{espaco}>> Iniciar verificação UM POR UM? (S/Enter p/ Sim, ESC p/ Pular): "): return
 
     print("\n")
-    abrir_pdfs = utils.pedir_confirmacao(f"{Cor.YELLOW}Deseja ABRIR os PDFs para acompanhamento? (S/Enter p/ Sim, ESC p/ Modo Rápido): {Cor.RESET}")
-    
-    integrar_escala = utils.pedir_confirmacao(f"{Cor.YELLOW}Deseja alimentar a ESCALA CUMPRIDA durante a verificação? (S/Enter p/ Sim, ESC p/ Não): {Cor.RESET}")
+    abrir_pdfs = utils.pedir_confirmacao(f"{espaco}{Cor.YELLOW}Deseja ABRIR os PDFs para acompanhamento? (S/Enter p/ Sim, ESC p/ Modo Rápido): {Cor.RESET}")
+    integrar_escala = utils.pedir_confirmacao(f"{espaco}{Cor.YELLOW}Deseja alimentar a ESCALA CUMPRIDA durante a verificação? (S/Enter p/ Sim, ESC p/ Não): {Cor.RESET}")
 
-    # Dicionário interno rápido para mapear o mês perfeito
     MESES_NOME = {
-        "01": "janeiro", "02": "fevereiro", "03": "março",
-        "04": "abril", "05": "maio", "06": "junho",
-        "07": "julho", "08": "agosto", "09": "setembro",
-        "10": "outubro", "11": "novembro", "12": "dezembro"
+        "01": "janeiro", "02": "fevereiro", "03": "março", "04": "abril", 
+        "05": "maio", "06": "junho", "07": "julho", "08": "agosto", 
+        "09": "setembro", "10": "outubro", "11": "novembro", "12": "dezembro"
     }
 
     for cnt, item in enumerate(lista_pendentes, start=1):
         caminho, data_str, turno = item['path'], item['data'], item['turno']
         nome_atual = os.path.basename(caminho)
         
-        # 👈 Geramos a data padronizada uma única vez aqui
         mes_limpo = MESES_NOME.get(mes, "mês")
         data_formatada = f"📅 Dia {data_str[:2]} de {mes_limpo} de 20{ano_curto} | {turno}º Turno"
         
@@ -122,22 +122,21 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
         if abrir_pdfs:
             utils.abrir_arquivo(caminho)
             
-        console.print(Align.center("\n[dim grey]Analisando estrutura e texto do PDF...[/dim grey]\n"))
+        console.print(Align.center("\n[dim grey]Analisando a estrutura e texto do PDF...[/dim grey]\n"))
         info = utils.analisar_conteudo_lro(caminho, mes, ano_curto)
         
-        # 👈 Passamos a data perfeita para o painel verde
         exibir_dados_analise(info, data_formatada)
         
         dir_arq = os.path.dirname(caminho)
         extensao = os.path.splitext(caminho)[1]
         
         if info['assinatura']:
-            if utils.pedir_confirmacao("\n>> Confirmar e assinar OK? (S/Enter p/ Sim, ESC p/ Não): "):
+            if utils.pedir_confirmacao(f"\n{espaco}>> Confirmar e assinar OK? (S/Enter p/ Sim, ESC p/ Não): "):
                 novo_nome_base = f"{data_str}_{turno}TURNO OK{extensao}"
                 novo_caminho = os.path.join(dir_arq, novo_nome_base)
                 renomear_arquivo(caminho, novo_caminho)
             else:
-                print(f"{Cor.GREY}   [-] Mantido.{Cor.RESET}")
+                print(f"{espaco}[-] Mantido.")
         else:
             nome_dic = extrair_nome_relato(info.get('responsavel', ''), mes, ano_curto)
             if nome_dic != "???":
@@ -146,13 +145,13 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
                 resp_base = utils.extrair_nome_base(info.get('responsavel', ''))
                 sugestao_str = f" ({resp_base})" if resp_base not in ["---", "???", ""] else ""
             
-            msg = f"\n>> {Cor.RED}ASSINATURA AUSENTE!{Cor.RESET} Renomear p/ FALTA ASS{sugestao_str}? (S/Enter p/ Sim, ESC p/ Não): "
+            msg = f"\n{espaco}>> {Cor.RED}ASSINATURA AUSENTE!{Cor.RESET} Renomear p/ FALTA ASS{sugestao_str}? (S/Enter p/ Sim, ESC p/ Não): "
             if utils.pedir_confirmacao(msg):
                 novo_nome_base = f"{data_str}_{turno}TURNO FALTA ASS{sugestao_str}{extensao}"
                 novo_caminho = os.path.join(dir_arq, novo_nome_base)
                 renomear_arquivo(caminho, novo_caminho)
             else:
-                print(f"{Cor.GREY}   [-] Mantido.{Cor.RESET}")
+                print(f"{espaco}[-] Mantido.")
                 
         if integrar_escala:
             import json
@@ -169,17 +168,15 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
             def obter_nome_pela_legenda(legenda_alvo, mapa):
                 for nome_guerra, dados_mapa in mapa.items():
                     if dados_mapa['legenda'] == legenda_alvo:
-                        return utils.extrair_nome_base(nome_guerra)
+                        return nome_guerra # Garante o retorno do posto e nome corretos
                 return "???"
             
             while True:
                 console.print("\n")
                 texto_escala = Text()
                 
-                # 👈 Título perfeitamente igual ao de cima
                 texto_escala.append(f"{data_formatada}\n\n", style="bold white")
                 
-                # 👈 Cores 100% padronizadas!
                 texto_escala.append(" • SMC: ", style="bold cyan")
                 texto_escala.append(f"{n_smc} ", style="white")
                 texto_escala.append(f"({l_smc})\n", style="bold cyan") 
@@ -201,7 +198,7 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
                 )
                 console.print(Align.center(painel_escala))
                 
-                print(f"\n>> Opção [S/Enter=Sim | M=Modificar | ESC=Não]: ", end='', flush=True)
+                print(f"\n{espaco}>> Opção [S/Enter=Sim | M=Modificar | ESC=Não]: ", end='', flush=True)
                 
                 if os.name == 'nt' and utils.MSVCRT_ENABLED:
                     import msvcrt
@@ -234,21 +231,19 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
                         txt.append(f"■ EQUIPE {nome_escala}:\n", style=f"bold {cor_titulo}")
                         itens = [f"[{v['legenda']}] {k.split('-')[0].strip()}" for k, v in mapa.items()]
                         
-                        # 👈 Guardamos as linhas numa lista primeiro
                         linhas = []
                         for i in range(0, len(itens), 4):
                             linha = itens[i:i+4]
                             linhas.append("   " + "".join(item.ljust(22) for item in linha))
                             
-                        # 👈 Juntamos tudo sem deixar Enter no final
                         txt.append("\n".join(linhas), style="white")
                         return txt
                         
                     mapa_completo = Text()
                     mapa_completo.append(gerar_texto_mapa("SMC", m_smc, "cyan"))
-                    mapa_completo.append("\n\n") # 👈 Adicionamos um respiro entre as equipas
+                    mapa_completo.append("\n\n") 
                     mapa_completo.append(gerar_texto_mapa("BCT", m_bct, "green"))
-                    mapa_completo.append("\n\n") # 👈 Adicionamos um respiro entre as equipas
+                    mapa_completo.append("\n\n") 
                     mapa_completo.append(gerar_texto_mapa("OEA", m_oea, "dark_orange"))
                     
                     painel_mapa = Panel(
@@ -260,9 +255,21 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
                     console.print(Align.center(painel_mapa))
                     console.print(Align.center("[dim grey](Deixe em branco e aperte Enter para manter a legenda atual)[/dim grey]\n"))
                     
-                    nl_smc = input(f"Nova legenda SMC [{l_smc}]: ").strip().upper()
-                    nl_bct = input(f"Nova legenda BCT [{l_bct}]: ").strip().upper()
-                    nl_oea = input(f"Nova legenda OEA [{l_oea}]: ").strip().upper()
+                    # 👈 CORREÇÃO DEFINITIVA: Inputs criados com blocos Text para não haver barras e as cores ficarem perfeitas
+                    prompt_smc = Text(f"{espaco}Nova legenda SMC [")
+                    prompt_smc.append(l_smc, style="bold cyan")
+                    prompt_smc.append("]: ")
+                    nl_smc = console.input(prompt_smc).strip().upper()
+                    
+                    prompt_bct = Text(f"{espaco}Nova legenda BCT [")
+                    prompt_bct.append(l_bct, style="bold green")
+                    prompt_bct.append("]: ")
+                    nl_bct = console.input(prompt_bct).strip().upper()
+                    
+                    prompt_oea = Text(f"{espaco}Nova legenda OEA [")
+                    prompt_oea.append(l_oea, style="bold dark_orange")
+                    prompt_oea.append("]: ")
+                    nl_oea = console.input(prompt_oea).strip().upper()
                     
                     if nl_smc: 
                         l_smc = nl_smc
@@ -312,23 +319,15 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
 
 # --- FUNÇÃO INTELIGENTE DE EXTRAÇÃO DE NOME ---
 def extrair_nome_relato(raw_str, mes=None, ano_curto=None):
-    """Procura o nome oficial do militar dentro do texto sujo do PDF usando o Dicionário."""
     if not raw_str or raw_str in ["---", "???"]: return "???"
     
-    # 1. Normaliza o texto (tira acentos, converte 'IS' para '1S', etc.)
     texto_norm = utils.normalizar_texto(raw_str)
-    
-    # 2. Carrega todos os nomes de guerra conhecidos
     mapa_smc, mapa_bct, mapa_oea = DadosEfetivo.mapear_efetivo(mes, ano_curto)
     todos_mapas = {**mapa_smc, **mapa_bct, **mapa_oea}
     
-    # 3. Extrai apenas as "essências" (GIOVANNI, SAULO, RUI, etc.)
     nomes_base = [utils.extrair_nome_base(ng) for ng in todos_mapas.keys()]
-    
-    # 4. Ordena por tamanho (os nomes maiores primeiro) para evitar falsos positivos
     nomes_base.sort(key=len, reverse=True)
     
-    # 5. Varre a frase. Usamos \b (Word Boundary) para não confundir "RUI" dentro de "ARUINADO"
     for nome_base in nomes_base:
         if re.search(rf'\b{re.escape(nome_base)}\b', texto_norm):
             return nome_base
@@ -358,13 +357,11 @@ def executar():
         agora = datetime.datetime.now()
         mes_atual, ano_atual_curto = agora.strftime("%m"), agora.strftime("%y")
 
-        # 1. PAINEL DE TÍTULO DO MÓDULO
         titulo = Text("SISTEMA LRO\nVerificador e Assinador de Documentos", justify="center", style="bold dark_orange")
         painel_titulo = Panel(titulo, border_style="dark_orange", padding=(1, 2), width=65)
         console.print(Align.center(painel_titulo))
         console.print("\n")
 
-        # 2. INPUT DE MÊS E ANO (Modernizado)
         if os.name == 'nt': 
             console.print(Align.center(f"[dim grey]Conectado: {Config.CAMINHO_RAIZ}[/dim grey]"))
             console.print()
@@ -397,7 +394,6 @@ def executar():
             
         if mes == mes_atual and ano_curto == ano_atual_curto: qtd_dias = agora.day
 
-        # 3. ANÁLISE SILENCIOSA E PAINEL DE STATUS
         utils.limpar_tela()
         titulo_analise = Text(f"ANALISANDO DIRETÓRIOS: {Config.MAPA_PASTAS.get(mes)} / {ano_longo}", justify="center", style="bold white on deep_sky_blue1")
         console.print(Align.center(Panel(titulo_analise, border_style="deep_sky_blue1", width=65)))
@@ -405,10 +401,8 @@ def executar():
         problemas = 0
         relatorio, lista_pendentes, lista_para_criar, lista_ano_errado = [], [], [], []
         
-        # Contadores para o painel analítico
         qtd_falta_ass, qtd_lro_feito_txt, qtd_nao_confeccionado, qtd_pendente, qtd_inexistente = 0, 0, 0, 0, 0
 
-        # O rich.status faz uma animação giratória enquanto o código varre as pastas
         with console.status("[bold deep_sky_blue1]A varrer ficheiros e a extrair dados...", spinner="dots"):
             for dia in range(1, qtd_dias + 1):
                 dia_fmt = f"{dia:02d}"
@@ -440,7 +434,6 @@ def executar():
                         relatorio.append(f"Dia {dia_fmt} - {turno}º Turno: NÃO ENCONTRADO"); problemas += 1; qtd_inexistente += 1
                         lista_para_criar.append({"str": data_str, "turno": turno, "dia": dia, "mes": mes, "ano": ano_longo})
 
-        # 4. EXIBIÇÃO DO PAINEL DE STATUS
         console.print("\n")
         if problemas == 0:
             painel_status = Panel(
@@ -472,8 +465,6 @@ def executar():
         corrigir_anos_errados(lista_ano_errado, ano_curto, ano_errado)
 
         if problemas > 0 and relatorio:
-
-            # 5. GERAÇÃO AUTOMÁTICA DO TXT DE COBRANÇA (Invisível na tela)
             nome_relatorio = f"Relatorio_Pendencias_{mes}_{ano_longo}.txt"
             caminho_relatorio = os.path.join(path_mes, nome_relatorio)
             try:
@@ -495,7 +486,6 @@ def executar():
                 turno = item['turno']
                 dt_atual = datetime.date(int(item['ano']), int(item['mes']), item['dia'])
                 
-                # Calcular Turno Anterior e Seguinte
                 if turno == 1:
                     dt_prev, tr_prev = dt_atual - datetime.timedelta(days=1), 3
                     dt_next, tr_next = dt_atual, 2
@@ -540,9 +530,6 @@ def executar():
                 sugestao_str = f" ({sugestao})" if sugestao else " ()"
                 novo_nome = f"{data_str}_{turno}TURNO FALTA LRO{sugestao_str}.txt"
                 
-                # ========================================================
-                # NOVO VISUAL PARA A GERAÇÃO DE ARQUIVO
-                # ========================================================
                 console.print()
                 texto_falta = Text()
                 texto_falta.append(f" ⬅️  Turno anterior passou para: ", style="dim white")
@@ -559,7 +546,8 @@ def executar():
                 )
                 console.print(Align.center(painel_falta))
                 
-                if utils.pedir_confirmacao(f" " * 5 + f">> Criar ficheiro '{novo_nome}'? (S/Enter p/ Sim, ESC p/ Pular): "):
+                espaco = " " * 15
+                if utils.pedir_confirmacao(f"{espaco}>> Criar ficheiro '{novo_nome}'? (S/Enter p/ Sim, ESC p/ Pular): "):
                     try: 
                         with open(os.path.join(path_mes, novo_nome), 'w') as f: f.write("Falta")
                         console.print(Align.center("[bold green]✅ Ficheiro criado com sucesso.[/bold green]"))
