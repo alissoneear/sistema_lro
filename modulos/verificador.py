@@ -1,18 +1,33 @@
 import os
+import sys
 import time
 import datetime
 import calendar
 import re
+import json
+import unicodedata
+import logging
+from pypdf import PdfReader
+
+logging.getLogger("pypdf").setLevel(logging.ERROR)
+
+# Importações do Rich consolidadas no topo
+from rich.console import Console
+from rich.panel import Panel
+from rich.align import Align
+from rich.text import Text
+from rich.prompt import Prompt
 
 from config import Config, Cor, DadosEfetivo 
 import utils
 
+# Instância única e global do Console
+console = Console()
+
 # ====================================================================
-# MOTOR "CAÇA-FANTASMAS" E RESPONSÁVEL (VERSÃO DEFINITIVA COM ACENTOS)
+# MOTOR "CAÇA-FANTASMAS" E RESPONSÁVEL (VERSÃO REFATORADA)
 # ====================================================================
 def recuperar_responsavel_legado(caminho_pdf):
-    from pypdf import PdfReader
-    import re
     try:
         reader = PdfReader(caminho_pdf)
         texto = "\n".join([p.extract_text() for p in reader.pages if p.extract_text()])
@@ -33,9 +48,8 @@ def recuperar_responsavel_legado(caminho_pdf):
     except: pass
     return "---"
 
-def recuperar_equipe_legada(caminho_pdf, mes, ano_curto):
-    from pypdf import PdfReader
-    import re
+def recuperar_equipe_legada(caminho_pdf):
+    """Recorta o bloco inteiro da equipe sem precisar do mês ou ano."""
     texto = ""
     try:
         reader = PdfReader(caminho_pdf)
@@ -53,7 +67,6 @@ def recuperar_equipe_legada(caminho_pdf, mes, ano_curto):
 
 def descobrir_legenda(texto_sujo, mapa):
     if not texto_sujo or texto_sujo in ['---', '???']: return '---'
-    import unicodedata, re
     
     ts = str(texto_sujo).replace('Ο','O').replace('Τ','T').replace('Ε','E').replace('Α','A').replace('Μ','M').replace('Ν','N')
     
@@ -89,7 +102,7 @@ def enriquecer_info_lro(info, caminho_pdf, mes, ano_curto):
     n_oea = info['equipe'].get('oea', '---')
     
     if n_bct in ['---', '???'] or n_oea in ['---', '???'] or n_smc in ['---', '???']:
-        f_smc, f_bct, f_oea = recuperar_equipe_legada(caminho_pdf, mes, ano_curto)
+        f_smc, f_bct, f_oea = recuperar_equipe_legada(caminho_pdf)
         if n_smc in ['---', '???'] and f_smc != '---': n_smc = f_smc
         if n_bct in ['---', '???'] and f_bct != '---': n_bct = f_bct
         if n_oea in ['---', '???'] and f_oea != '---': n_oea = f_oea
@@ -126,12 +139,6 @@ def corrigir_anos_errados(lista_ano_errado, ano_curto, ano_errado):
                 except Exception as e: print(f"{espaco}{Cor.RED}Erro ao renomear: {e}{Cor.RESET}")
 
 def exibir_dados_analise(info, data_formatada):
-    from rich.panel import Panel
-    from rich.text import Text
-    from rich.align import Align
-    from rich.console import Console
-    console = Console()
-
     if not info: return
     
     conteudo = Text()
@@ -182,12 +189,6 @@ def renomear_arquivo(caminho_atual, novo_caminho):
             break
 
 def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
-    from rich.console import Console
-    from rich.panel import Panel
-    from rich.align import Align
-    from rich.text import Text
-    console = Console()
-    
     if not lista_pendentes: return
     
     espaco = " " * 15 
@@ -231,7 +232,6 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
         console.print(Align.center("\n[dim grey]A analisar estrutura e texto do PDF...[/dim grey]\n"))
         info = utils.analisar_conteudo_lro(caminho, mes, ano_curto)
         
-        # 👈 INJEÇÃO DO FILTRO DE LIMPEZA AQUI
         info = enriquecer_info_lro(info, caminho, mes, ano_curto)
 
         exibir_dados_analise(info, data_formatada)
@@ -263,10 +263,8 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
                 print(f"{espaco}[-] Mantido.")
                 
         if integrar_escala:
-            import json
             m_smc, m_bct, m_oea = DadosEfetivo.mapear_efetivo(mes, ano_curto)
             
-            # Como a Info já foi limpa pelo enriquecedor, os nomes estão perfeitos (Ex: '1T CERUTTI')
             n_smc = info['equipe'].get('smc', '---')
             n_bct = info['equipe'].get('bct', '---')
             n_oea = info['equipe'].get('oea', '---')
@@ -443,18 +441,6 @@ def extrair_nome_relato(raw_str, mes=None, ano_curto=None):
     return "???"
 
 def executar():
-    import os
-    import time
-    import datetime
-    import calendar
-    from rich.console import Console
-    from rich.panel import Panel
-    from rich.align import Align
-    from rich.text import Text
-    from rich.prompt import Prompt
-    
-    console = Console()
-
     if os.name == 'nt' and not os.path.exists(Config.CAMINHO_RAIZ):
         console.print(Align.center(Panel(f"[bold red][ERRO CRÍTICO] Caminho {Config.CAMINHO_RAIZ} não encontrado.[/bold red]", border_style="red")))
         input()
