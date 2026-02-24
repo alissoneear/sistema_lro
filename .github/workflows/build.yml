@@ -25,7 +25,7 @@ jobs:
     - name: Gerar Executável com PyInstaller
       # Aqui adicionamos o ícone e o nome do programa!
       run: |
-        python -m PyInstaller --onefile --console --icon="sar.ico" --name "Sistema LRO" --collect-all rich main.py
+        python -m PyInstaller --onefile --console --icon="favicon.ico" --name "Sistema LRO" --collect-all rich main.py
 
     - name: Upload do Executável
       uses: actions/upload-artifact@v4
