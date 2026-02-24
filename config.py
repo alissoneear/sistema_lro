@@ -3,7 +3,12 @@ import json
 
 class Config:
     if os.name == 'nt':
+<<<<<<< HEAD
         CAMINHO_RAIZ = r"E:\dev\sistema_lro\ARQUIVOS" #Windows-Dev
+=======
+        CAMINHO_RAIZ = r"R:\DO\COI\ARCC-CW\14 - LRO" #Prod
+        #CAMINHO_RAIZ = r"E:\dev\sistema_lro\ARQUIVOS" #Windows-Dev
+>>>>>>> 9c07c000743226252b269b4b3bd020947b15999c
     else:
         CAMINHO_RAIZ = "/Users/alissonlourenco/Dev/sistema_lro/ARQUIVOS" #Mac
     
