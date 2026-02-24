@@ -1,13 +1,17 @@
 import os
+import sys
 import json
 
 class Config:
-    if os.name == 'nt':
-
-        CAMINHO_RAIZ = r"E:\dev\sistema_lro\ARQUIVOS" #Windows-Dev
-        #CAMINHO_RAIZ = r"R:\DO\COI\ARCC-CW\14 - LRO" #Prod
+    # Verifica se o programa está a rodar como um Executável compilado pelo PyInstaller
+    if getattr(sys, 'frozen', False):
+        CAMINHO_RAIZ = r"R:\DO\COI\ARCC-CW\14 - LRO" # Produção (Lá no trabalho)
     else:
-        CAMINHO_RAIZ = "/Users/alissonlourenco/Dev/sistema_lro/ARQUIVOS" #Mac
+        # Se for script (.py), verifica o sistema operativo para o modo DEV
+        if os.name == 'nt':
+            CAMINHO_RAIZ = r"E:\dev\sistema_lro\ARQUIVOS" # Windows-Dev
+        else:
+            CAMINHO_RAIZ = "/Users/alissonlourenco/Dev/sistema_lro/ARQUIVOS" # Mac-Dev
     
     MAPA_PASTAS = {
         "01": "1 - JANEIRO",   "02": "2 - FEVEREIRO", "03": "3 - MARÇO", "04": "4 - ABRIL",
