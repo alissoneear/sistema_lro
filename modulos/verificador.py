@@ -7,6 +7,112 @@ import re
 from config import Config, Cor, DadosEfetivo 
 import utils
 
+# ====================================================================
+# MOTOR "CAÇA-FANTASMAS" E RESPONSÁVEL (VERSÃO DEFINITIVA COM ACENTOS)
+# ====================================================================
+def recuperar_responsavel_legado(caminho_pdf):
+    from pypdf import PdfReader
+    import re
+    try:
+        reader = PdfReader(caminho_pdf)
+        texto = "\n".join([p.extract_text() for p in reader.pages if p.extract_text()])
+        linhas = [l.strip() for l in texto.split('\n') if l.strip()]
+        
+        for i, linha in enumerate(linhas):
+            if linha.startswith("Data:") and i > 0:
+                nome = linhas[i-1].upper()
+                if "GOV.BR" in nome or "DIGITALMENTE" in nome:
+                    if i > 1: nome = linhas[i-2].upper()
+                
+                nome = re.sub(r'[^A-ZÀ-ÿ\s]', '', nome).strip()
+                if len(nome) > 5: return nome
+        
+        for linha in reversed(linhas):
+            m = re.search(r'([A-ZÀ-ÿ\s]{10,}?)\s*[-–]\s*(?:1S|2S|3S|IS|25|35|SO|CAP|MAJ|1T|2T|IT)', linha.upper())
+            if m: return m.group(1).strip()
+    except: pass
+    return "---"
+
+def recuperar_equipe_legada(caminho_pdf, mes, ano_curto):
+    from pypdf import PdfReader
+    import re
+    texto = ""
+    try:
+        reader = PdfReader(caminho_pdf)
+        for page in reader.pages:
+            ext = page.extract_text()
+            if ext: texto += ext + "\n"
+    except: return "---", "---", "---"
+
+    bloco = texto.upper()
+    m = re.search(r'EQUIPE DE SERVI[CÇ]O(.*?)(?:3\.\s*OCORR[EÊ]NCIAS|4\.\s*PASSAGEM|OCORR[EÊ]NCIAS)', bloco, re.DOTALL)
+    if m: 
+        bloco = m.group(1)
+        
+    return bloco, bloco, bloco
+
+def descobrir_legenda(texto_sujo, mapa):
+    if not texto_sujo or texto_sujo in ['---', '???']: return '---'
+    import unicodedata, re
+    
+    ts = str(texto_sujo).replace('Ο','O').replace('Τ','T').replace('Ε','E').replace('Α','A').replace('Μ','M').replace('Ν','N')
+    
+    def remover_acentos(txt):
+        return unicodedata.normalize('NFD', txt).encode('ascii', 'ignore').decode('utf-8').upper()
+    
+    texto_limpo = re.sub(r'[^A-Z0-9]', '', remover_acentos(ts))
+    
+    def limpar_p(ng):
+        for p in ['MAJ ', 'CAP ', '1T ', '2T ', 'SO ', '1S ', '2S ', '3S ', 'CB ', 'S1 ', 'S2 ']:
+            if ng.startswith(p): return ng[len(p):].strip()
+        return ng.strip()
+        
+    for ng in sorted(mapa.keys(), key=lambda x: len(limpar_p(x)), reverse=True):
+        nome_puro = remover_acentos(limpar_p(ng))
+        nome_puro_limpo = re.sub(r'[^A-Z0-9]', '', nome_puro)
+        
+        if nome_puro_limpo and nome_puro_limpo in texto_limpo:
+            return mapa[ng]['legenda']
+            
+    return '---'
+
+def enriquecer_info_lro(info, caminho_pdf, mes, ano_curto):
+    """Filtro que limpa o texto bruto e devolve apenas o Nome de Guerra oficial."""
+    if not info: return info
+    
+    if info.get('responsavel', '---') in ['---', '???', '', None]:
+        resp = recuperar_responsavel_legado(caminho_pdf)
+        if resp != '---': info['responsavel'] = resp
+
+    n_smc = info['equipe'].get('smc', '---')
+    n_bct = info['equipe'].get('bct', '---')
+    n_oea = info['equipe'].get('oea', '---')
+    
+    if n_bct in ['---', '???'] or n_oea in ['---', '???'] or n_smc in ['---', '???']:
+        f_smc, f_bct, f_oea = recuperar_equipe_legada(caminho_pdf, mes, ano_curto)
+        if n_smc in ['---', '???'] and f_smc != '---': n_smc = f_smc
+        if n_bct in ['---', '???'] and f_bct != '---': n_bct = f_bct
+        if n_oea in ['---', '???'] and f_oea != '---': n_oea = f_oea
+        
+    m_smc, m_bct, m_oea = DadosEfetivo.mapear_efetivo(mes, ano_curto)
+    
+    l_smc = descobrir_legenda(n_smc, m_smc)
+    l_bct = descobrir_legenda(n_bct, m_bct)
+    l_oea = descobrir_legenda(n_oea, m_oea)
+    
+    def obter_nome_limpo(legenda, mapa, original):
+        for ng, dados in mapa.items():
+            if dados['legenda'] == legenda: return ng
+        # Se não achou e o texto for muito grande (parágrafo inteiro), oculta para não poluir a tela
+        return original if len(original) < 30 else '---'
+        
+    info['equipe']['smc'] = obter_nome_limpo(l_smc, m_smc, n_smc)
+    info['equipe']['bct'] = obter_nome_limpo(l_bct, m_bct, n_bct)
+    info['equipe']['oea'] = obter_nome_limpo(l_oea, m_oea, n_oea)
+    
+    return info
+# ====================================================================
+
 def corrigir_anos_errados(lista_ano_errado, ano_curto, ano_errado):
     espaco = " " * 15
     if not lista_ano_errado: return
@@ -84,7 +190,7 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
     
     if not lista_pendentes: return
     
-    espaco = " " * 15 # Alinhamento centralizado para todas as perguntas
+    espaco = " " * 15 
     
     console.print("\n")
     painel_verificacao = Panel(
@@ -122,9 +228,12 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
         if abrir_pdfs:
             utils.abrir_arquivo(caminho)
             
-        console.print(Align.center("\n[dim grey]Analisando a estrutura e texto do PDF...[/dim grey]\n"))
+        console.print(Align.center("\n[dim grey]A analisar estrutura e texto do PDF...[/dim grey]\n"))
         info = utils.analisar_conteudo_lro(caminho, mes, ano_curto)
         
+        # 👈 INJEÇÃO DO FILTRO DE LIMPEZA AQUI
+        info = enriquecer_info_lro(info, caminho, mes, ano_curto)
+
         exibir_dados_analise(info, data_formatada)
         
         dir_arq = os.path.dirname(caminho)
@@ -157,18 +266,19 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
             import json
             m_smc, m_bct, m_oea = DadosEfetivo.mapear_efetivo(mes, ano_curto)
             
+            # Como a Info já foi limpa pelo enriquecedor, os nomes estão perfeitos (Ex: '1T CERUTTI')
             n_smc = info['equipe'].get('smc', '---')
             n_bct = info['equipe'].get('bct', '---')
             n_oea = info['equipe'].get('oea', '---')
             
-            l_smc = utils.encontrar_legenda(n_smc, m_smc) if n_smc not in ['---', '???'] else '---'
-            l_bct = utils.encontrar_legenda(n_bct, m_bct) if n_bct not in ['---', '???'] else '---'
-            l_oea = utils.encontrar_legenda(n_oea, m_oea) if n_oea not in ['---', '???'] else '---'
+            l_smc = descobrir_legenda(n_smc, m_smc)
+            l_bct = descobrir_legenda(n_bct, m_bct)
+            l_oea = descobrir_legenda(n_oea, m_oea)
             
             def obter_nome_pela_legenda(legenda_alvo, mapa):
                 for nome_guerra, dados_mapa in mapa.items():
                     if dados_mapa['legenda'] == legenda_alvo:
-                        return nome_guerra # Garante o retorno do posto e nome corretos
+                        return nome_guerra 
                 return "???"
             
             while True:
@@ -255,7 +365,6 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
                     console.print(Align.center(painel_mapa))
                     console.print(Align.center("[dim grey](Deixe em branco e aperte Enter para manter a legenda atual)[/dim grey]\n"))
                     
-                    # 👈 CORREÇÃO DEFINITIVA: Inputs criados com blocos Text para não haver barras e as cores ficarem perfeitas
                     prompt_smc = Text(f"{espaco}Nova legenda SMC [")
                     prompt_smc.append(l_smc, style="bold cyan")
                     prompt_smc.append("]: ")
@@ -317,11 +426,10 @@ def processo_verificacao_visual(lista_pendentes, mes, ano_curto):
                     console.print(Align.center("[bold green]✅ Cache da Escala Cumprida alimentado com sucesso![/bold green]"))
                     break
 
-# --- FUNÇÃO INTELIGENTE DE EXTRAÇÃO DE NOME ---
 def extrair_nome_relato(raw_str, mes=None, ano_curto=None):
     if not raw_str or raw_str in ["---", "???"]: return "???"
-    
     texto_norm = utils.normalizar_texto(raw_str)
+    
     mapa_smc, mapa_bct, mapa_oea = DadosEfetivo.mapear_efetivo(mes, ano_curto)
     todos_mapas = {**mapa_smc, **mapa_bct, **mapa_oea}
     

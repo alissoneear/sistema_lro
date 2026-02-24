@@ -6,11 +6,83 @@ import re
 import logging
 from pypdf import PdfReader, PdfWriter
 
-# Silencia avisos de fontes do pypdf para não poluir o terminal
 logging.getLogger("pypdf").setLevel(logging.ERROR)
 
 from config import Config, Cor, DadosEfetivo
 import utils
+
+# ====================================================================
+# MOTOR "CAÇA-FANTASMAS" E RESPONSÁVEL (VERSÃO DEFINITIVA COM ACENTOS)
+# ====================================================================
+def recuperar_responsavel_legado(caminho_pdf):
+    from pypdf import PdfReader
+    import re
+    try:
+        reader = PdfReader(caminho_pdf)
+        texto = "\n".join([p.extract_text() for p in reader.pages if p.extract_text()])
+        linhas = [l.strip() for l in texto.split('\n') if l.strip()]
+        
+        for i, linha in enumerate(linhas):
+            if linha.startswith("Data:") and i > 0:
+                nome = linhas[i-1].upper()
+                if "GOV.BR" in nome or "DIGITALMENTE" in nome:
+                    if i > 1: nome = linhas[i-2].upper()
+                
+                # CORREÇÃO: O À-ÿ garante que TUDO o que for acento, til ou cedilha seja lido perfeitamente
+                nome = re.sub(r'[^A-ZÀ-ÿ\s]', '', nome).strip()
+                if len(nome) > 5: return nome
+        
+        for linha in reversed(linhas):
+            m = re.search(r'([A-ZÀ-ÿ\s]{10,}?)\s*[-–]\s*(?:1S|2S|3S|IS|25|35|SO|CAP|MAJ|1T|2T|IT)', linha.upper())
+            if m: return m.group(1).strip()
+    except: pass
+    return "---"
+
+def recuperar_equipe_legada(caminho_pdf, mes, ano_curto):
+    from pypdf import PdfReader
+    import re
+    texto = ""
+    try:
+        reader = PdfReader(caminho_pdf)
+        for page in reader.pages:
+            ext = page.extract_text()
+            if ext: texto += ext + "\n"
+    except: return "---", "---", "---"
+
+    bloco = texto.upper()
+    m = re.search(r'EQUIPE DE SERVI[CÇ]O(.*?)(?:3\.\s*OCORR[EÊ]NCIAS|4\.\s*PASSAGEM|OCORR[EÊ]NCIAS)', bloco, re.DOTALL)
+    if m: 
+        bloco = m.group(1)
+        
+    return bloco, bloco, bloco
+
+def descobrir_legenda(texto_sujo, mapa):
+    if not texto_sujo or texto_sujo in ['---', '???']: return '---'
+    import unicodedata, re
+    
+    ts = str(texto_sujo).replace('Ο','O').replace('Τ','T').replace('Ε','E').replace('Α','A').replace('Μ','M').replace('Ν','N')
+    
+    # CORREÇÃO: Função dedicada para transformar "LOURENÇO" e "RÉGIS" em "LOURENCO" e "REGIS"
+    def remover_acentos(txt):
+        return unicodedata.normalize('NFD', txt).encode('ascii', 'ignore').decode('utf-8').upper()
+    
+    texto_limpo = re.sub(r'[^A-Z0-9]', '', remover_acentos(ts))
+    
+    def limpar_p(ng):
+        for p in ['MAJ ', 'CAP ', '1T ', '2T ', 'SO ', '1S ', '2S ', '3S ', 'CB ', 'S1 ', 'S2 ']:
+            if ng.startswith(p): return ng[len(p):].strip()
+        return ng.strip()
+        
+    for ng in sorted(mapa.keys(), key=lambda x: len(limpar_p(x)), reverse=True):
+        # A MÁGICA ACONTECE AQUI: Tiramos os acentos do nome do Dicionário ANTES de comparar!
+        nome_puro = remover_acentos(limpar_p(ng))
+        nome_puro_limpo = re.sub(r'[^A-Z0-9]', '', nome_puro)
+        
+        if nome_puro_limpo and nome_puro_limpo in texto_limpo:
+            return mapa[ng]['legenda']
+            
+    return '---'
+# ====================================================================
 
 def obter_info_militar(legenda, mapa_efetivo):
     for nome_completo, dados in mapa_efetivo.items():
@@ -28,7 +100,6 @@ def get_sem(ano, mes, dia):
     return Config.MAPA_SEMANA[dt.weekday()]
 
 def imprimir_tabela(escala_detalhada, qtd_dias, opcao_escala, ano_longo, mes):
-    """Função auxiliar para imprimir a tabela da escala formatada com Rich."""
     from rich.table import Table
     from rich.console import Console
     from rich.align import Align
@@ -98,7 +169,6 @@ def imprimir_tabela(escala_detalhada, qtd_dias, opcao_escala, ano_longo, mes):
     return tracos
 
 def realizar_auditoria_manual(escala_detalhada, mes, ano_curto, path_mes, opcao_escala, mapa_ativo, alertas_suspeitos=None, caminho_cache=None):
-    """Procura falhas na extração OU alertas da auditoria e abre o PDF exibindo os motivos."""
     from rich.console import Console
     from rich.panel import Panel
     from rich.align import Align
@@ -111,7 +181,6 @@ def realizar_auditoria_manual(escala_detalhada, mes, ano_curto, path_mes, opcao_
     pendentes = []
     dias = sorted(escala_detalhada.keys())
     
-    # Mapear os campos que precisam de atenção e seus motivos
     for dia in dias:
         if opcao_escala == '1':
             leg = escala_detalhada[dia]['smc']
@@ -135,12 +204,8 @@ def realizar_auditoria_manual(escala_detalhada, mes, ano_curto, path_mes, opcao_
                 if motivos:
                     pendentes.append((dia, t, leg, motivos))
                     
-    if not pendentes:
-        return False 
+    if not pendentes: return False 
         
-    # ========================================================
-    # 1. PAINEL DE INÍCIO DA AUDITORIA
-    # ========================================================
     console.print("\n")
     painel_auditoria = Panel(
         f"[bold white]Existem [dark_orange]{len(pendentes)}[/dark_orange] turnos pendentes de revisão.[/bold white]",
@@ -158,9 +223,6 @@ def realizar_auditoria_manual(escala_detalhada, mes, ano_curto, path_mes, opcao_
         
     validas = [dados['legenda'] for dados in mapa_ativo.values()]
     
-    # ========================================================
-    # 2. CRIAÇÃO DO MAPA VISUAL DE LEGENDAS (Padrão Rich)
-    # ========================================================
     nome_escala = "SMC" if opcao_escala == '1' else "BCT" if opcao_escala == '2' else "OEA"
     cor_titulo = "cyan" if opcao_escala == '1' else "green" if opcao_escala == '2' else "dark_orange"
 
@@ -199,9 +261,6 @@ def realizar_auditoria_manual(escala_detalhada, mes, ano_curto, path_mes, opcao_
         data_str = f"{dia_fmt}{mes}{ano_curto}"
         mes_limpo = MESES_NOME.get(mes, "mês")
         
-        # ========================================================
-        # 3. RÉGUA SEPARADORA E MOTIVOS DE AUDITORIA
-        # ========================================================
         console.print("\n")
         if opcao_escala == '1':
             console.rule(f"[bold deep_sky_blue1]▶ Auditando: Dia {dia_fmt} de {mes_limpo} - SMC [/bold deep_sky_blue1]", style="deep_sky_blue1")
@@ -228,9 +287,6 @@ def realizar_auditoria_manual(escala_detalhada, mes, ano_curto, path_mes, opcao_
         else:
             console.print(Align.center("[bold red][!] Nenhum PDF encontrado para este turno.[/bold red]"))
             
-        # ========================================================
-        # 4. EXIBIÇÃO DO MAPA E INPUT DO UTILIZADOR
-        # ========================================================
         console.print("\n")
         console.print(Align.center(painel_mapa))
         console.print(Align.center("[dim grey](Deixe em branco e aperte Enter para manter a legenda atual)[/dim grey]\n"))
@@ -246,7 +302,6 @@ def realizar_auditoria_manual(escala_detalhada, mes, ano_curto, path_mes, opcao_
                 modificado = True
                 console.print(f"\n[bold green]   ✅ Legenda atualizada para: {nova_leg}[/bold green]")
 
-                # SALVAMENTO AUTOMÁTICO NO CACHE
                 if caminho_cache:
                     import json
                     try:
@@ -261,14 +316,11 @@ def realizar_auditoria_manual(escala_detalhada, mes, ano_curto, path_mes, opcao_
 
 def verificar_e_propor_correcoes(escala_detalhada, mapa_efetivo, ano, mes):
     inconsistencias = [] 
-    correcoes = []       # Não usaremos mais auto-correção, deixaremos a lista vazia
-    alertas_manuais = {} # Dicionário: (dia, turno) -> [motivos]
+    correcoes = []       
+    alertas_manuais = {} 
     dias = sorted(escala_detalhada.keys())
     ignorar = ['---', '???', 'PND', 'ERR']
     
-    def obter_legenda_pelo_nome(nome_guerra):
-        return utils.encontrar_legenda(nome_guerra, mapa_efetivo)
-        
     def add_alerta(d, t, msg):
         if (d, t) not in alertas_manuais:
             alertas_manuais[(d, t)] = []
@@ -280,7 +332,6 @@ def verificar_e_propor_correcoes(escala_detalhada, mapa_efetivo, ano, mes):
         dia_sem = get_sem(ano, mes, dia)
         l1, l2, l3 = dados_dia[1]['legenda'], dados_dia[2]['legenda'], dados_dia[3]['legenda']
         
-        # --- REGRA 1: DOBRA DE TURNO ---
         violacao = None
         if l1 not in ignorar and l1 == l2: violacao = (1, 2, l1)
         elif l2 not in ignorar and l2 == l3: violacao = (2, 3, l2)
@@ -288,16 +339,11 @@ def verificar_e_propor_correcoes(escala_detalhada, mapa_efetivo, ano, mes):
         if violacao:
             t_a, t_b, leg = violacao
             nome_mil = obter_info_militar(leg, mapa_efetivo)
-            
-            # Motivos para a revisão visual
             motivo_dobra = f"Possível dobra de turno detetada ({t_a}º e {t_b}º) do militar {nome_mil} ({leg})."
             add_alerta(dia, t_a, motivo_dobra)
             add_alerta(dia, t_b, motivo_dobra)
-            
-            # Apenas relata o problema (Sem tentar adivinhar a solução)
             inconsistencias.append(f"Dia {dia:02d} ({dia_sem}): Militar {nome_mil} ({leg}) dobrou o turno ({t_a}º e {t_b}º).")
 
-        # --- REGRA 2: FOLGA PÓS-3º TURNO ---
         if i > 0:
             dia_ant = dias[i-1]
             dia_sem_ant = get_sem(ano, mes, dia_ant)
@@ -307,23 +353,17 @@ def verificar_e_propor_correcoes(escala_detalhada, mapa_efetivo, ano, mes):
                 turnos_hoje_violados = [t for t in [1, 2, 3] if escala_detalhada[dia][t]['legenda'] == l3_ant]
                 if turnos_hoje_violados:
                     nome_mil = obter_info_militar(l3_ant, mapa_efetivo)
-
                     for t_hoje in turnos_hoje_violados:
                         motivo_folga_hoje = f"Falta de folga regulamentar. O militar {nome_mil} ({l3_ant}) estava escalado no 3º Turno do dia {dia_ant:02d}."
                         motivo_folga_ontem = f"Militar {nome_mil} ({l3_ant}) escalado aqui, mas aparece sem folga no {t_hoje}º Turno do dia seguinte ({dia:02d})."
                         
                         add_alerta(dia, t_hoje, motivo_folga_hoje)
                         add_alerta(dia_ant, 3, motivo_folga_ontem)
-
-                    # Apenas relata o problema
                     inconsistencias.append(f"Dia {dia:02d} ({dia_sem}): Militar {nome_mil} ({l3_ant}) sem folga do dia {dia_ant:02d} ({dia_sem_ant}).")
                     
     return inconsistencias, correcoes, alertas_manuais
 
 def gerar_pdf_escala(escala_detalhada, mapa_ativo, opcao_escala, mes, ano_longo):
-    """
-    Busca o template na raiz, preenche BCT/OEA com horas, ou SMC com turno único.
-    """
     especialidade = "smc" if opcao_escala == '1' else "bct" if opcao_escala == '2' else "oea"
     
     MESES = {
@@ -334,12 +374,10 @@ def gerar_pdf_escala(escala_detalhada, mapa_ativo, opcao_escala, mes, ano_longo)
     }
     mes_abrev, mes_longo = MESES.get(mes, ("xxx", "XXX"))
     
-    # 1. Caminho Simplificado (Ex: templates/bct/bct_2026_jan_temp.pdf)
     caminho_template = os.path.join(
         "templates", especialidade, f"{especialidade}_{ano_longo}_{mes_abrev}_temp.pdf"
     )
     
-    # Mantemos a saída organizada para não misturar os PDFs gerados
     pasta_saida = os.path.join("SAIDAS_PDF", especialidade, ano_longo, mes_abrev)
     if not os.path.exists(pasta_saida):
         os.makedirs(pasta_saida)
@@ -354,13 +392,12 @@ def gerar_pdf_escala(escala_detalhada, mapa_ativo, opcao_escala, mes, ano_longo)
     
     minutos_por_turno = {1: 435, 2: 435, 3: 615}
     horas_militares = {}
-    efetivo_smc_unico = set() # Usado apenas para contar quantos SMCs trabalharam no mês
+    efetivo_smc_unico = set() 
     
     for dia, turnos_dia in escala_detalhada.items():
         dados_pdf[f"d{dia}_sem"] = get_sem(ano_longo, mes, dia)
 
         if opcao_escala == '1': 
-            # 2. Lógica Simplificada para SMC (Sem horas, Apenas d1_turno)
             leg = turnos_dia.get('smc', '')
             if leg not in ['---', 'PND', 'ERR', '???']:
                 dados_pdf[f"d{dia}_turno"] = leg
@@ -368,7 +405,6 @@ def gerar_pdf_escala(escala_detalhada, mapa_ativo, opcao_escala, mes, ano_longo)
             else:
                 dados_pdf[f"d{dia}_turno"] = ""
         else:
-            # 3. Lógica Clássica para BCT e OEA
             for t in [1, 2, 3]:
                 leg = turnos_dia[t]['legenda']
                 if leg not in ['---', 'PND', 'ERR', '???']:
@@ -377,7 +413,6 @@ def gerar_pdf_escala(escala_detalhada, mapa_ativo, opcao_escala, mes, ano_longo)
                 else:
                     dados_pdf[f"d{dia}_t{t}"] = ""
                 
-    # Limpa campos extras se o mês tiver menos de 31 dias
     for dia_extra in range(len(escala_detalhada) + 1, 32):
         dados_pdf[f"d{dia_extra}_sem"] = ""
         if opcao_escala == '1':
@@ -385,7 +420,6 @@ def gerar_pdf_escala(escala_detalhada, mapa_ativo, opcao_escala, mes, ano_longo)
         else:
             for t in [1, 2, 3]: dados_pdf[f"d{dia_extra}_t{t}"] = ""
 
-    # Cálculo final de horas (Ignorado para SMC)
     if opcao_escala == '1':
         dados_pdf["ef_escala"] = str(len(efetivo_smc_unico)).zfill(2)
     else:
@@ -405,7 +439,7 @@ def gerar_pdf_escala(escala_detalhada, mapa_ativo, opcao_escala, mes, ano_longo)
             dados_pdf[campos_horas[idx]] = ""
             idx += 1
             
-    print(f"\n{Cor.GREY}Gerando o documento oficial...{Cor.RESET}")
+    print(f"\n{Cor.GREY}A preencher o documento oficial...{Cor.RESET}")
     reader = PdfReader(caminho_template)
     writer = PdfWriter()
     writer.append(reader)
@@ -460,17 +494,11 @@ def executar():
         agora = datetime.datetime.now()
         mes_atual, ano_atual_curto = agora.strftime("%m"), agora.strftime("%y")
 
-        # ========================================================
-        # 1. PAINEL DE TÍTULO DO MÓDULO
-        # ========================================================
         titulo = Text("SISTEMA LRO\nGerador de Escala Cumprida e Auditoria", justify="center", style="bold dark_orange")
         painel_titulo = Panel(titulo, border_style="dark_orange", padding=(1, 2), width=65)
         console.print(Align.center(painel_titulo))
         console.print("\n")
 
-        # ========================================================
-        # 2. INPUT DE MÊS E ANO (Modernizado)
-        # ========================================================
         inp_mes = console.input(" " * 18 + f"[bold dark_orange]MÊS[/bold dark_orange] [dim white](Enter para {mes_atual}):[/dim white] ").strip()
         mes = inp_mes.zfill(2) if inp_mes else mes_atual
         
@@ -487,9 +515,6 @@ def executar():
             console.print(Align.center(Panel(titulo_menu, border_style="dark_orange", width=65)))
             console.print("\n")
             
-            # ========================================================
-            # 3. MENU DE ESPECIALIDADES EM PAINEL
-            # ========================================================
             menu_opcoes = Text()
             menu_opcoes.append("  [1] ", style="bold dark_orange")
             menu_opcoes.append("Escala Cumprida - SMC\n")
@@ -528,9 +553,6 @@ def executar():
             except: break
             if mes == mes_atual and ano_curto == ano_atual_curto: qtd_dias = agora.day
 
-            # ========================================================
-            # 4. DETEÇÃO DO CACHE E PERGUNTA AO USUÁRIO
-            # ========================================================
             import json
             especialidade_nome = 'smc' if opcao_escala == '1' else 'bct' if opcao_escala == '2' else 'oea'
             caminho_cache = os.path.join(path_mes, f".cache_escala_{especialidade_nome}.json")
@@ -568,13 +590,11 @@ def executar():
             print(f"\n{Cor.GREY}Processando os dados e auditando as inconsistências... Aguarde.{Cor.RESET}\n")
 
             escala_detalhada = {}
-            mapa_ativo = mapa_smc if opcao_escala == '1' else mapa_bct if opcao_escala == '2' else mapa_oea
+            mapa_ativo = mapa_smc if opcao_escala == '1' else mapa_bct if opcao_escala == '2' else mapa_oea 
 
-            # CONFIGURAÇÃO DA BARRA DE PROGRESSO FLUIDA (RICH PREMIUM)
             from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, SpinnerColumn, ProgressColumn
             from rich.text import Text
 
-            # Criando medidores de tempo 100% customizados e em português!
             class TempoDecorridoBR(ProgressColumn):
                 def render(self, task):
                     elapsed = task.elapsed
@@ -595,21 +615,20 @@ def executar():
                 SpinnerColumn("dots", style="bold dark_orange"),
                 TextColumn("[bold white]{task.description}"),
                 BarColumn(
-                    bar_width=30, # Deixei a barra um pouco mais compacta para caber os textos novos
+                    bar_width=30, 
                     style="grey37",                      
                     complete_style="bold dark_orange"    
                 ),
                 TaskProgressColumn(text_format="[bold cyan]{task.percentage:>3.0f}%"), 
                 TextColumn("[dim grey]• Decorrido:[/dim grey]"),
-                TempoDecorridoBR(),                      # 👈 Nossa coluna customizada!
+                TempoDecorridoBR(),                      
                 TextColumn("[dim grey]• Restante:[/dim grey]"),
-                TempoRestanteBR()                        # 👈 Nossa coluna customizada!
+                TempoRestanteBR()                        
             )
             tarefa_extracao = progress.add_task("Extraindo dados...", total=total_passos)
             
             progress.start()
 
-            # Extração de Dados
             for dia in range(1, qtd_dias + 1):
                 dia_fmt = f"{dia:02d}"
                 data_str = f"{dia_fmt}{mes}{ano_curto}"
@@ -622,7 +641,6 @@ def executar():
                     progress.update(tarefa_extracao, advance=1)
                     dia_str, turno_str = str(dia), str(turno)
                     
-                    # 1. CARREGAMENTO INTELIGENTE DO CACHE (Corrigido para SMC!)
                     pulou_por_cache = False
                     if cache_dados and dia_str in cache_dados:
                         if opcao_escala == '1' and 'smc' in cache_dados[dia_str]:
@@ -640,9 +658,7 @@ def executar():
                                 pulou_por_cache = True
 
                     if pulou_por_cache: continue
-                    
-                    if turno not in turnos: 
-                        continue
+                    if turno not in turnos: continue
                         
                     arquivos = utils.buscar_arquivos_flexivel(path_mes, data_str, turno)
                     if not arquivos: continue
@@ -656,13 +672,33 @@ def executar():
 
                     arquivo_alvo = [f for f in pdfs if "OK" in f.upper()][0] if [f for f in pdfs if "OK" in f.upper()] else pdfs[0]
                     info = utils.analisar_conteudo_lro(arquivo_alvo, mes, ano_curto)
+                    
                     if info:
+                        if info.get('responsavel', '---') in ['---', '???', '', None]:
+                            resp_fFantasma = recuperar_responsavel_legado(arquivo_alvo)
+                            if resp_fFantasma != '---': info['responsavel'] = resp_fFantasma
+
+                        n_smc = info['equipe'].get('smc', '---')
+                        n_bct = info['equipe'].get('bct', '---')
+                        n_oea = info['equipe'].get('oea', '---')
+                        
+                        # --------------------------------------------------------
+                        # INJEÇÃO DO CAÇA-FANTASMAS NA ESCALA
+                        # --------------------------------------------------------
+                        if n_bct in ['---', '???'] or n_oea in ['---', '???'] or n_smc in ['---', '???']:
+                            f_smc, f_bct, f_oea = recuperar_equipe_legada(arquivo_alvo, mes, ano_curto)
+                            if n_smc in ['---', '???'] and f_smc != '---': n_smc = f_smc
+                            if n_bct in ['---', '???'] and f_bct != '---': n_bct = f_bct
+                            if n_oea in ['---', '???'] and f_oea != '---': n_oea = f_oea
+                        # --------------------------------------------------------
+
+                        # Ativando o Esmagador de Textos na Escala
                         if opcao_escala == '1': 
-                            dia_dados['smc'] = utils.encontrar_legenda(info['equipe']['smc'], mapa_smc)
+                            dia_dados['smc'] = descobrir_legenda(n_smc, mapa_smc)
                         elif opcao_escala == '2': 
-                            dia_dados['bct'][turno] = utils.encontrar_legenda(info['equipe']['bct'], mapa_bct)
+                            dia_dados['bct'][turno] = descobrir_legenda(n_bct, mapa_bct)
                         elif opcao_escala == '3': 
-                            dia_dados['oea'][turno] = utils.encontrar_legenda(info['equipe']['oea'], mapa_oea)
+                            dia_dados['oea'][turno] = descobrir_legenda(n_oea, mapa_oea)
                         
                         resp_base = utils.extrair_nome_base(info.get('responsavel', ''))
                         dia_dados['meta'][turno]['assinatura_nome'] = resp_base
@@ -670,7 +706,6 @@ def executar():
                         if opcao_escala == '2': dia_dados['bct'][turno] = 'ERR'
                         if opcao_escala == '3': dia_dados['oea'][turno] = 'ERR'
 
-                # 2. SALVAMENTO CORRETO NA MEMÓRIA DA ESCALA
                 escala_detalhada[dia] = {}
                 if opcao_escala == '1':
                     escala_detalhada[dia]['smc'] = dia_dados['smc']
@@ -682,14 +717,12 @@ def executar():
             progress.stop() 
             print("\n")
 
-            # SALVA O ESTADO INICIAL NO CACHE
             if caminho_cache:
                 import json
                 try:
                     with open(caminho_cache, 'w', encoding='utf-8') as f: json.dump(escala_detalhada, f, indent=4)
                 except: pass
 
-            # --- 1. ALERTA DE SEGURANÇA OPERACIONAL (RADAR) COM RICH ---
             from rich.panel import Panel
             from rich.text import Text
             from rich.align import Align
@@ -698,7 +731,20 @@ def executar():
 
             if opcao_escala in ['2', '3']:
                 inconsistencias, _, _ = verificar_e_propor_correcoes(escala_detalhada, mapa_ativo, ano_longo, mes)
-                if inconsistencias:
+                
+                # NOVO: Conta turnos vazios para não dar "falso positivo"
+                turnos_vazios = sum(1 for d in escala_detalhada.values() for t in [1, 2, 3] if d[t]['legenda'] in ['---', 'ERR', 'PND', '???'])
+                total_turnos = len(escala_detalhada) * 3
+                
+                if turnos_vazios == total_turnos:
+                    painel = Panel(
+                        "[bold yellow]⚠️ Escala sem dados extraídos. O Radar Operacional não tem informações para analisar.[/bold yellow]", 
+                        title="[bold yellow] 🔍 ANÁLISE PRÉVIA DE CONSISTÊNCIA [/bold yellow]", 
+                        border_style="yellow", 
+                        padding=(1, 2)
+                    )
+                    console_rich.print(Align.center(painel))
+                elif inconsistencias:
                     texto_alerta = Text()
                     for inc in inconsistencias: 
                         if "sem folga" in inc:
@@ -724,16 +770,14 @@ def executar():
                     )
                     console_rich.print(Align.center(painel))
             else:
-                # Radar específico para o SMC (Chefia)
                 painel = Panel(
-                    "[bold green]✅ Auditoria de descanso não aplicável ao regime de SMC.[/bold green]", 
+                    "[bold green]✅ Auditoria de descanso não aplicável ao regime de Chefia (SMC).[/bold green]", 
                     title="[bold green] 🔍 ANÁLISE PRÉVIA DE CONSISTÊNCIA [/bold green]", 
                     border_style="green", 
                     padding=(1, 2)
                 )
                 console_rich.print(Align.center(painel))
 
-            # --- 2. LOOP DE AUDITORIA MANUAL INFINITO ---
             while True:
                 alertas_ativos = {}
                 if opcao_escala in ['2', '3']:
@@ -746,11 +790,9 @@ def executar():
                 if not teve_correcao_manual:
                     break
 
-            # --- EXIBIÇÃO DA TABELA VISUAL ANTES DO PDF ---
             utils.limpar_tela()
             imprimir_tabela(escala_detalhada, qtd_dias, opcao_escala, ano_longo, mes)
 
-            # --- 3. RESUMO FINAL E GERAÇÃO DO PDF COM RICH ---
             print("\n")
             if opcao_escala in ['2', '3']:
                 inc_final, _, _ = verificar_e_propor_correcoes(escala_detalhada, mapa_ativo, ano_longo, mes)
@@ -783,62 +825,7 @@ def executar():
                     
             console_rich.print(Align.center(painel_final))
             
-            if utils.pedir_confirmacao(f"\n{Cor.CYAN}>> Deseja gerar o PDF oficial desta Escala Cumprida? (S/Enter p/ Sim, ESC p/ Pular): {Cor.RESET}"):
+            if utils.pedir_confirmacao(f"\n{Cor.CYAN}>> Deseja GERAR O PDF OFICIAL desta Escala Cumprida? (S/Enter p/ Sim, ESC p/ Pular): {Cor.RESET}"):
                 gerar_pdf_escala(escala_detalhada, mapa_ativo, opcao_escala, mes, ano_longo)
-
-            if not utils.pedir_confirmacao(f"\n{Cor.YELLOW}Verificar outra especialidade? (S/Enter p/ Sim, ESC p/ Voltar): {Cor.RESET}"): return
-
-            # --- 2. LOOP DE AUDITORIA MANUAL INFINITO ---
-            while True:
-                alertas_ativos = {}
-                if opcao_escala in ['2', '3']:
-                    _, _, alertas_ativos = verificar_e_propor_correcoes(escala_detalhada, mapa_ativo, ano_longo, mes)
-
-                teve_correcao_manual = realizar_auditoria_manual(
-                    escala_detalhada, mes, ano_curto, path_mes, opcao_escala, mapa_ativo, alertas_ativos, caminho_cache
-                )
-                
-                if teve_correcao_manual:
-                    utils.limpar_tela()
-                    print(f"{Cor.ORANGE}=== SISTEMA LRO - Escala Cumprida ({mes}/{ano_curto}) ==={Cor.RESET}")
-                    print(f"\n{Cor.GREEN}✅ Tabela atualizada após Auditoria Manual:{Cor.RESET}")
-                    tracos = imprimir_tabela(escala_detalhada, qtd_dias, opcao_escala, ano_longo, mes)
-                else:
-                    break
-
-            # --- 3. RESUMO FINAL E GERAÇÃO DO PDF COM RICH ---
-            if opcao_escala in ['2', '3']:
-                inc_final, _, _ = verificar_e_propor_correcoes(escala_detalhada, mapa_ativo, ano_longo, mes)
-                
-                from rich.panel import Panel
-                from rich.text import Text
-                from rich.align import Align
-                from rich.console import Console
-                console_rich = Console()
-                
-                print("\n")
-                if inc_final:
-                    texto_final = Text()
-                    for inc in inc_final: 
-                        texto_final.append(f" {inc}\n", style="bold red")
-                        
-                    painel_final = Panel(
-                        texto_final, 
-                        title="[bold red]RESUMO DA AUDITORIA OPERACIONAL[/bold red]", 
-                        border_style="red", 
-                        padding=(1, 2)
-                    )
-                else:
-                    painel_final = Panel(
-                        "[bold green]✅ Escala validada e consistente com as normas de folga.[/bold green]", 
-                        title="[bold green]RESUMO DA AUDITORIA OPERACIONAL[/bold green]",
-                        border_style="green", 
-                        padding=(1, 2)
-                    )
-                    
-                console_rich.print(Align.center(painel_final))
-                
-                if utils.pedir_confirmacao(f"\n{Cor.CYAN}>> Deseja GERAR O PDF OFICIAL desta Escala Cumprida? (S/Enter p/ Sim, ESC p/ Pular): {Cor.RESET}"):
-                    gerar_pdf_escala(escala_detalhada, mapa_ativo, opcao_escala, mes, ano_longo)
 
             if not utils.pedir_confirmacao(f"\n{Cor.YELLOW}Verificar outra especialidade? (S/Enter p/ Sim, ESC p/ Voltar): {Cor.RESET}"): return
