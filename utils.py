@@ -143,6 +143,11 @@ def extrair_dados_texto(texto_linear, dados, mes=None, ano_curto=None):
     if match_data:
         dados["cabecalho"] = f"Dia {match_data.group(2)} de {match_data.group(3)} de {match_data.group(1)} turno {match_data.group(4)}"
     
+    # Número do Ofício
+    match_oficio = re.search(r"Ofício\s*nº\s*(\d+)", texto_linear, re.IGNORECASE)
+    if match_oficio:
+        dados["oficio_num"] = match_oficio.group(1)
+    
     # Recebeu/Passou
     match_bloco_recebeu = re.search(r"RECEBIMENTO DO SERVI[CÇ]O:(.*?)(?:2\.\s*EQUIPE|EQUIPE DE SERVI[CÇ]O)", texto_linear, re.IGNORECASE)
     raw_recebeu = match_bloco_recebeu.group(1).strip() if match_bloco_recebeu else "---"
@@ -247,6 +252,7 @@ def analisar_conteudo_lro(caminho_pdf, mes=None, ano_curto=None):
         "texto_equipe": "",
         "recebeu": "---", # 👉 PROTEÇÃO ADICIONADA AQUI
         "passou": "---",  # 👉 PROTEÇÃO ADICIONADA AQUI
+        "oficio_num": "---",
         "inconsistencia_data": None
     }
     
