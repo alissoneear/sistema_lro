@@ -142,6 +142,9 @@ def exibir_dados_analise(info, data_formatada):
     if not info: return
     
     conteudo = Text()
+    conteudo.append("📄 OFÍCIO Nº: ", style="bold white")
+    conteudo.append(f"{info.get('oficio_num', '---')}\n", style="bold cyan")
+    
     conteudo.append("👤 RESPONSÁVEL: ", style="bold white")
     conteudo.append(f"{info['responsavel']}\n", style="bold cyan")
     
