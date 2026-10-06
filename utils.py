@@ -315,7 +315,7 @@ def gerar_dashboard_boas_vindas():
     mes, ano = agora.strftime("%m"), agora.strftime("%y")
     ano_longo = "20" + ano
     
-    path_ano = os.path.join(Config.CAMINHO_RAIZ, f"LRO {ano_longo}")
+    path_ano = os.path.join(Config.CAMINHO_RAIZ, f"2 LRO {ano_longo}")
     path_mes = os.path.join(path_ano, Config.MAPA_PASTAS.get(mes, "X"))
     
     if not os.path.exists(path_mes):

@@ -5,7 +5,7 @@ import json
 class Config:
     # Verifica se o programa está a rodar como um Executável compilado pelo PyInstaller
     if getattr(sys, 'frozen', False):
-        CAMINHO_RAIZ = r"R:\DO\COI\ARCC-CW\14 - LRO\2 LRO 2026" # Produção (Lá no trabalho)
+        CAMINHO_RAIZ = r"R:\DO\COI\ARCC-CW\14 - LRO" # Produção (Lá no trabalho)
     else:
         # Se for script (.py), verifica o sistema operativo para o modo DEV
         if os.name == 'nt':
